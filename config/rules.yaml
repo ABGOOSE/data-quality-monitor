@@ -1,0 +1,13 @@
+tables:
+  sample_orders:
+    columns:
+      order_id:
+        - rule: not_null
+        - rule: unique
+      amount:
+        - rule: range
+          min: 0
+          max: 1000000
+    checks:
+      - rule: row_count
+        min: 1
