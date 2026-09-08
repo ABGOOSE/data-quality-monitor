@@ -1,7 +1,10 @@
 """Data quality check engine."""
 
+import pandas as pd
 
-def check_not_null(series):
+
+def check_not_null(series: pd.Series) -> dict:
+    #返回注解：-> dict 表示这个函数返回字典，注释作用
     """Check if a series contains null values.
 
     Args:
@@ -16,6 +19,7 @@ def check_not_null(series):
     """
     total_count = len(series)
     null_count = int(series.isna().sum())
+    #`series.isna()`：把每个元素变成布尔掩码
     return {
         "rule": "not_null",
         "passed": null_count == 0,
@@ -25,7 +29,7 @@ def check_not_null(series):
     }
 
 
-def check_unique(series):
+def check_unique(series: pd.Series) -> dict:
     """Check if a series contains duplicate non-null values.
 
     Args:
@@ -50,7 +54,7 @@ def check_unique(series):
     }
 
 
-def check_range(series, min_value, max_value):
+def check_range(series: pd.Series, min_value: float, max_value: float) -> dict:
     """Check if non-null values fall within [min_value, max_value].
 
     Args:
