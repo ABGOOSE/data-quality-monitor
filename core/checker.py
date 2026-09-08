@@ -1,9 +1,7 @@
 """Data quality check engine."""
 
-import pandas as pd
 
-
-def check_not_null(series: pd.Series) -> dict:
+def check_not_null(series):
     """Check if a series contains null values.
 
     Args:
@@ -27,7 +25,7 @@ def check_not_null(series: pd.Series) -> dict:
     }
 
 
-def check_unique(series: pd.Series) -> dict:
+def check_unique(series):
     """Check if a series contains duplicate non-null values.
 
     Args:
@@ -52,7 +50,7 @@ def check_unique(series: pd.Series) -> dict:
     }
 
 
-def check_range(series: pd.Series, min_value: float, max_value: float) -> dict:
+def check_range(series, min_value, max_value):
     """Check if non-null values fall within [min_value, max_value].
 
     Args:
