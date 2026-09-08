@@ -6,3 +6,6 @@ A lightweight data quality monitoring tool with rule engine, statistical anomaly
 
 Project initialized, first commit coming soon.
 
+## 2026/09/08 
+## test from codex
+This line is added in VS Code to test git integration.
