@@ -82,3 +82,36 @@ def check_range(series: pd.Series, min_value: float, max_value: float) -> dict:
         "min_value": min_value,
         "max_value": max_value,
     }
+
+
+RULE_FUNCTIONS = {
+    "not_null": check_not_null,
+    "unique": check_unique,
+    "range": check_range,
+}
+
+
+def run_checks(df: pd.DataFrame, table_rules: dict) -> list[dict]:
+    """Run all column rules from a table config against a DataFrame.
+
+    Args:
+        df: DataFrame to check.
+        table_rules: Table rule config from rules.yaml, e.g.
+            {"columns": {"order_id": [{"rule": "not_null"}, ...]}}
+
+    Returns:
+        A list of check result dicts (one per rule).
+    """
+    results = []
+    for column, rules in table_rules.get("columns", {}).items():
+        if column not in df.columns:
+            continue
+        series = df[column]
+        for rule_config in rules:
+            rule_name = rule_config["rule"]
+            if rule_name not in RULE_FUNCTIONS:
+                continue
+            params = {key: value for key, value in rule_config.items() if key != "rule"}
+            func = RULE_FUNCTIONS[rule_name]
+            results.append(func(series, **params))
+    return results
