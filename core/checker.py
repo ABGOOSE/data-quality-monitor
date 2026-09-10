@@ -22,7 +22,7 @@ def check_not_null(series: pd.Series) -> dict:
     #`series.isna()`：把每个元素变成布尔掩码
     return {
         "rule": "not_null",
-        "passed": null_count == 0,
+        "passed": null_count == 0, #这是一个布尔值判断
         "null_count": null_count,
         "total_count": total_count,
         "null_ratio": round(null_count / total_count, 4) if total_count > 0 else 0,
@@ -52,9 +52,10 @@ def check_unique(series: pd.Series) -> dict:
         "total_count": total_count,
         "duplicate_ratio": round(duplicate_count / total_count, 4) if total_count > 0 else 0,
     }
-
+    #返回的是一个字典。
 
 def check_range(series: pd.Series, min_value: float, max_value: float) -> dict:
+    #等效于def check_range(series, min_value, max_value)
     """Check if non-null values fall within [min_value, max_value].
 
     Args:
