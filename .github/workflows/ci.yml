@@ -1,0 +1,46 @@
+name: CI
+
+# 触发时机：push 到 main、以及任何 pull request 都会跑一遍
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # 用 GitHub 提供的干净 ubuntu 环境跑，和本地 Windows 无关——
+    # 同一份代码在两种系统上都要绿，才是真的可移植
+    runs-on: ubuntu-latest
+    strategy:
+      # matrix 矩阵：下面这份 steps 会在 3.10 和 3.12 两个 Python 版本各跑一遍，
+      # 保证代码没有用到"只有新版本才有的语法"
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4   # 第一步永远是：把仓库代码拉到 CI 机器上
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}  # ${{ }} 取矩阵里当前那一个值
+          cache: pip  # 缓存依赖包，第二次跑不用重新下载，能快很多
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"  # 和本地一模一样的安装方式，顺带验证 pyproject 打包配置没问题
+
+      - name: Lint with ruff
+        run: |
+          ruff check .
+          ruff format --check .  # --check：只检查不改文件，格式不对就让 CI 变红
+
+      - name: Test with pytest
+        run: pytest
+
+      - name: Smoke test the CLI
+        run: |
+          dqm --table sample_orders --data data/sample_orders.csv
+          # 坏数据必须失败：! 表示"这条命令失败才是对的"。
+          # 如果哪天 CLI 坏到连违规数据都退出码 0，这一步会立刻变红
+          ! dqm --table sample_orders --data data/sample_orders_bad.csv
