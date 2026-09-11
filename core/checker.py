@@ -85,10 +85,38 @@ def check_range(series: pd.Series, min_value: float, max_value: float) -> dict:
     }
 
 
+def check_row_count(df: pd.DataFrame, min_rows: int = 1) -> dict:
+    """Check if a DataFrame has at least min_rows rows.
+
+    Args:
+        df: DataFrame to check (table-level rule, receives the whole table).
+        min_rows: Minimum number of rows required (inclusive).
+
+    Returns:
+        A dict with check result:
+        - passed: True if the table has at least min_rows rows
+        - row_count: actual number of rows
+        - min_rows: the threshold used for the check
+    """
+    row_count = len(df)
+    return {
+        "rule": "row_count",
+        "passed": row_count >= min_rows,
+        "row_count": row_count,
+        "min_rows": min_rows,
+    }
+
+
+# 分派表：列级规则名 -> 检查函数（函数接收一列 Series）
 RULE_FUNCTIONS = {
     "not_null": check_not_null,
     "unique": check_unique,
     "range": check_range,
+}
+
+# 分派表：表级规则名 -> 检查函数（函数接收整个 DataFrame）
+TABLE_RULE_FUNCTIONS = {
+    "row_count": check_row_count,
 }
 
 
