@@ -31,6 +31,8 @@ include = ["core*", "config*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# 个人学习日志（markdown 里的代码块）不参与代码规范检查
+exclude = ["notes"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
