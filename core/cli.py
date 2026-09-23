@@ -1,7 +1,9 @@
 """Command-line entry point: dqm --table <name> --data <csv>.
 
-把「读配置 -> 读数据 -> 跑检查 -> 打印结果」串成一条完整链路，
+把「读配置 -> 读数据 -> 跑检查 -> 打印结果 -> 导出报告（可选）」串成一条完整链路，
 将来接 Airflow 定时调度、面试现场 demo 用的都是这个入口。
+报告导出由 core.reporter 负责：--report json|markdown 把结果写成文件，
+JSON 给程序（存库、对比历史趋势），Markdown 给人（周报、交付业务方）。
 """
 
 import argparse
