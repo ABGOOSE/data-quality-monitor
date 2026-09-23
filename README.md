@@ -13,12 +13,14 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 | 列级 | `unique` | 唯一性检查（空值不算重复） |
 | 列级 | `range` | 数值范围检查 `[min_value, max_value]`（边界值合法） |
 | 表级 | `row_count` | 最少行数检查 `min_rows` |
+| 列级 | `zscore` | 统计异常检测（\|z\| > threshold，默认 3σ，边界由数据自动算出） |
 
 - **配置驱动**：改 `config/rules.yaml` 不用改代码
 - **契约测试**：YAML 里声明的每条规则，必须有对应实现且参数匹配（`tests/test_config_loader.py`），CI 每次跑测试自动拦截「配置写了、代码没写」的情况
 - **Fail fast**：配置里出现未知规则名直接抛 `ValueError`，不静默跳过
 - **CLI 入口**：`dqm --table <表名> --data <csv>`，有规则失败时退出码 1，可直接接 CI / Airflow 调度
 - **CI**：GitHub Actions 每次 push / PR 自动跑 ruff + pytest + CLI 冒烟测试
+- **统计异常检测**：`zscore` 规则按「均值±Nσ」自动找离群点，适合无固定边界的列（流量、延迟、成交量）
 
 ## 快速开始
 
@@ -93,7 +95,7 @@ ruff format .   # 代码格式化
 
 ## Roadmap
 
-- [ ] 统计异常检测（z-score / 均值±Nσ）
+- [x] 统计异常检测（z-score / 均值±Nσ）
 - [ ] 更多规则：`regex`、`allowed_values`、`null_ratio` 阈值
 - [ ] 结果导出（JSON / Markdown 报告）
 - [ ] 告警（Webhook 通知）

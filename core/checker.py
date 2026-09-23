@@ -112,6 +112,66 @@ def check_row_count(df: pd.DataFrame, min_rows: int = 1) -> dict:
     }
 
 
+
+
+# 统计异常检测规则：z = (x - mean) / std，|z| > threshold 的值判为离群。
+# 和 range 的区别：边界不是人写的，是数据自己算的（均值±Nσ），
+# 适合"不知道正常范围是多少"的列（流量、延迟、成交量）。
+# 注意 z-score 的弱点：离群值本身会拉高 mean 和 std，所以它适合
+# 主体数据集中的场景；主体被污染时可能"稀释"掉离群信号。
+def check_zscore(series: pd.Series, threshold: float = 3.0) -> dict:
+    """Check if any non-null value deviates from the mean by more than threshold stds.
+
+    Args:
+        series: A pandas Series to check.
+        threshold: |z| above this value is an outlier (default 3 = 3σ rule).
+
+    Returns:
+        A dict with check result:
+        - passed: True if no outlier
+        - outlier_count: number of values with |z| > threshold
+        - total_count: total number of rows
+        - outlier_ratio: ratio of outliers
+        - threshold: the threshold used for the check
+    """
+    total_count = len(series)
+    # 和其他规则一致：null 归 not_null 管，这里只看非空值
+    non_null = series.dropna().astype(float)
+    # 非空值不足 2 个：标准差算不出来，没有足够证据说异常 → 通过
+    if len(non_null) < 2:
+        return {
+            "rule": "zscore",
+            "passed": True,
+            "outlier_count": 0,
+            "total_count": total_count,
+            "outlier_ratio": 0.0,
+            "threshold": threshold,
+        }
+    mean = non_null.mean()
+    std = non_null.std()
+    # 标准差为 0（所有值相同）：没有波动就没有异常 → 通过
+    if std == 0:
+        return {
+            "rule": "zscore",
+            "passed": True,
+            "outlier_count": 0,
+            "total_count": total_count,
+            "outlier_ratio": 0.0,
+            "threshold": threshold,
+        }
+    # 向量化：整列一次性算 z 分数，不用 for 循环（pandas 广播）
+    z_scores = ((non_null - mean) / std).abs()
+    # 严格 > threshold：|z| 恰好等于阈值不算异常（边界测试守住这个行为）
+    outlier_count = int((z_scores > threshold).sum())
+    return {
+        "rule": "zscore",
+        "passed": outlier_count == 0,
+        "outlier_count": outlier_count,
+        "total_count": total_count,
+        "outlier_ratio": round(outlier_count / total_count, 4) if total_count > 0 else 0,
+        "threshold": threshold,
+    }
+
 # 分派表：列级规则名 -> 检查函数（函数接收一列 Series）
 # YAML 里的 "rule: not_null" 是字符串，字符串不能直接调用，
 # 必须靠这个字典把字符串翻译成对应的函数——这就是"分派"的含义。
@@ -120,6 +180,7 @@ RULE_FUNCTIONS = {
     "not_null": check_not_null,
     "unique": check_unique,
     "range": check_range,
+    "zscore": check_zscore,
 }
 
 # 表级分派表：单独一张表，因为函数签名不同——收 DataFrame，不是 Series。

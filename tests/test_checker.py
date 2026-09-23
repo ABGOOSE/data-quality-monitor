@@ -3,7 +3,14 @@
 import pandas as pd
 import pytest
 
-from core.checker import check_not_null, check_range, check_row_count, check_unique, run_checks
+from core.checker import (
+    check_not_null,
+    check_range,
+    check_row_count,
+    check_unique,
+    check_zscore,
+    run_checks,
+)
 
 
 def test_not_null_all_valid():
@@ -250,3 +257,57 @@ def test_run_checks_unknown_table_rule_raises():
     table_rules = {"checks": [{"rule": "no_such_rule"}]}
     with pytest.raises(ValueError, match="no_such_rule"):
         run_checks(df, table_rules)
+
+# ---------- 统计异常检测 check_zscore ----------
+# z-score：z = (x - mean) / std，|z| > threshold 的值判为离群。
+# 和 range 的区别：边界不是人写的，是数据自己算的（均值±Nσ）。
+# 测试六件套：检测 / 正常 / 边界严格> / 数据不足 / 零方差 / 空值
+def test_zscore_detects_outliers():
+    """An extreme value (|z| > 3) should be flagged as an outlier."""
+    # 10 个 10 + 1 个 100：mean≈18.2, std≈27.1 → z(100)≈3.02 > 3
+    # 注意：离群值必须真的超出 3σ——值不够极端时 z 会被均值和标准差"稀释"
+    series = pd.Series([10.0] * 10 + [100.0])
+    result = check_zscore(series)
+    assert result["passed"] is False
+    assert result["outlier_count"] == 1
+    assert result["total_count"] == 11
+
+
+def test_zscore_normal_data_passes():
+    """Small fluctuations around the mean should pass."""
+    series = pd.Series([1, 2, 1, 2, 1, 2])
+    result = check_zscore(series)
+    assert result["passed"] is True
+    assert result["outlier_count"] == 0
+
+
+def test_zscore_boundary_strict():
+    """|z| exactly at threshold is NOT an outlier (strict >, not >=)."""
+    # mean=2, std=1 → 1 和 3 的 |z| 恰好 = 1.0；threshold=1.0 时不算异常。
+    # 这个测试专门抓实现里把 > 误写成 >= 的 bug
+    series = pd.Series([1, 2, 3])
+    result = check_zscore(series, threshold=1.0)
+    assert result["passed"] is True
+    assert result["outlier_count"] == 0
+
+
+def test_zscore_insufficient_data_passes():
+    """Fewer than 2 non-null values: std undefined, no evidence, pass."""
+    series = pd.Series([5])
+    result = check_zscore(series)
+    assert result["passed"] is True
+
+
+def test_zscore_constant_series_passes():
+    """All values identical (std=0): no variance, no outliers."""
+    series = pd.Series([5, 5, 5, 5])
+    result = check_zscore(series)
+    assert result["passed"] is True
+
+
+def test_zscore_ignores_nulls():
+    """Null values are not z-score violations (consistent with other rules)."""
+    series = pd.Series([None] + [10.0] * 10 + [100.0])
+    result = check_zscore(series)
+    assert result["passed"] is False
+    assert result["outlier_count"] == 1

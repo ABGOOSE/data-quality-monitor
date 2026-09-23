@@ -10,6 +10,12 @@ tables:
           max_value: 1000000
     # 表级规则：作用在整个表上。
     # 参数键名 min_rows 必须和 check_row_count 的函数签名对齐，契约测试会守住这一点
+  sample_metrics:
+    columns:
+      request_count:
+        - rule: zscore
+          threshold: 3
+
     checks:
       - rule: row_count
         min_rows: 1
