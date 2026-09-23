@@ -6,12 +6,14 @@
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from core.checker import run_checks
 from core.config_loader import load_rules
+from core.reporter import export_report
 
 # 默认配置文件路径：用 __file__ 动态定位，而不是写死相对路径。
 # __file__ 是当前文件的路径；.resolve() 转成绝对路径；
@@ -46,7 +48,31 @@ def build_parser() -> argparse.ArgumentParser:
         # default：用户不传 --config 时就用项目自带的 rules.yaml
         help=f"Path to rules.yaml (default: {DEFAULT_CONFIG})",
     )
+    # --report：把检查结果导出成文件（json 给程序、markdown 给人），不传就只打印终端
+    # choices 限制取值范围：传别的值 argparse 直接报错退出（退出码 2）
+    parser.add_argument(
+        "--report",
+        choices=["json", "markdown"],
+        help="Export results to a report file: json (machine-readable) or markdown (human-readable)",
+    )
+    # --output：报告输出路径，配合 --report 使用；不传就自动命名
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Report output path (used with --report; default: report_<table>_<timestamp>.json/md)",
+    )
     return parser
+
+
+def _default_report_path(table: str, fmt: str) -> Path:
+    """没传 --output 时自动命名：report_<表名>_<时间戳>.<后缀>，放在当前目录。
+
+    时间戳用 %Y%m%d_%H%M%S 保证文件名唯一（同一表同一秒跑两次才会撞名）。
+    """
+    ext = "json" if fmt == "json" else "md"
+    # astimezone() 加本地时区，满足 ruff DTZ005；strftime 只取年月日时分秒做文件名
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+    return Path.cwd() / f"report_{table}_{timestamp}.{ext}"
 
 
 def render_results(table: str, results: list[dict]) -> str:
@@ -104,6 +130,13 @@ def main(argv: list[str] | None = None) -> int:
 
     results = run_checks(df, rules["tables"][args.table])
     print(render_results(args.table, results))
+    # ---- 结果导出（可选）：--report 指定格式，--output 指定路径 ----
+    # 放在打印之后：终端报告照常显示，导出是额外的留档动作。
+    # 注意：导出不影响退出码——有检查失败仍然返回 1，CI 判断不变。
+    if args.report:
+        output = args.output or _default_report_path(args.table, args.report)
+        export_report(results, args.report, output, args.table)
+        print(f"Report written to {output}")
     # all() + 生成器表达式：所有结果都 passed 才返回 True。
     # main 返回的数字会被 sys.exit 转成进程退出码——退出码就是 CLI 和 CI 之间的"协议"
     return 0 if all(result["passed"] for result in results) else 1

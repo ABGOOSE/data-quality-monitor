@@ -21,6 +21,7 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 - **CLI 入口**：`dqm --table <表名> --data <csv>`，有规则失败时退出码 1，可直接接 CI / Airflow 调度
 - **CI**：GitHub Actions 每次 push / PR 自动跑 ruff + pytest + CLI 冒烟测试
 - **统计异常检测**：`zscore` 规则按「均值±Nσ」自动找离群点，适合无固定边界的列（流量、延迟、成交量）
+- **结果导出**：`--report json|markdown` 把检查结果写成报告文件（JSON 给程序、Markdown 给人），可归档、可对比历史
 
 ## 快速开始
 
@@ -41,6 +42,11 @@ dqm --table sample_orders --data data/sample_orders_bad.csv
 
 # 4. 检查空表 → 表级 row_count 规则 FAIL
 dqm --table sample_orders --data data/sample_orders_empty.csv
+```
+
+# 5. 导出报告文件（JSON / Markdown）
+dqm --table sample_orders --data data/sample_orders.csv --report json --output report.json
+dqm --table sample_orders --data data/sample_orders.csv --report markdown --output report.md
 ```
 
 输出示例：
@@ -97,7 +103,7 @@ ruff format .   # 代码格式化
 
 - [x] 统计异常检测（z-score / 均值±Nσ）
 - [ ] 更多规则：`regex`、`allowed_values`、`null_ratio` 阈值
-- [ ] 结果导出（JSON / Markdown 报告）
+- [x] 结果导出（JSON / Markdown 报告）
 - [ ] 告警（Webhook 通知）
 - [ ] 接入 Airflow 定时调度
 
