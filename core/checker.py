@@ -172,6 +172,41 @@ def check_zscore(series: pd.Series, threshold: float = 3.0) -> dict:
         "threshold": threshold,
     }
 
+# 枚举值检查规则：列的值必须属于给定集合（订单状态、渠道、性别这种"只能填固定几项"的列）。
+# 和 range 的区别：range 管数值边界（大小），allowed_values 管枚举集合（是不是这几个选项之一）。
+# 设计决策：空值不算违规——空值是"没填"，不是"填错了"，归 not_null 管。
+def check_allowed_values(series: pd.Series, allowed_values: list) -> dict:
+    """Check if non-null values belong to the allowed value set.
+
+    Args:
+        series: A pandas Series to check.
+        allowed_values: List of allowed values, e.g. ["pending", "shipped"].
+
+    Returns:
+        A dict with check result:
+        - passed: True if no non-null value is outside the allowed set
+        - disallowed_count: number of values not in the allowed set
+        - total_count: total number of rows
+        - disallowed_ratio: ratio of disallowed values
+        - allowed_values: the allowed set used for the check
+    """
+    total_count = len(series)
+    # 和其他列级规则一致：空值归 not_null 管，这里只看非空值
+    non_null = series.dropna()
+    # ~ 是"取反"：isin(allowed_values) 得到"在集合里"的布尔掩码，
+    # 取反后就是"不在集合里"的违规掩码，.sum() 数违规个数
+    disallowed_count = int((~non_null.isin(allowed_values)).sum())
+    return {
+        "rule": "allowed_values",
+        "passed": disallowed_count == 0,
+        "disallowed_count": disallowed_count,
+        "total_count": total_count,
+        "disallowed_ratio": round(disallowed_count / total_count, 4) if total_count > 0 else 0,
+        # 转成 list：YAML 里可能是元组/列表，统一成 list 保证 JSON 报告能序列化
+        "allowed_values": list(allowed_values),
+    }
+
+
 # 分派表：列级规则名 -> 检查函数（函数接收一列 Series）
 # YAML 里的 "rule: not_null" 是字符串，字符串不能直接调用，
 # 必须靠这个字典把字符串翻译成对应的函数——这就是"分派"的含义。
@@ -181,6 +216,7 @@ RULE_FUNCTIONS = {
     "unique": check_unique,
     "range": check_range,
     "zscore": check_zscore,
+    "allowed_values": check_allowed_values,
 }
 
 # 表级分派表：单独一张表，因为函数签名不同——收 DataFrame，不是 Series。

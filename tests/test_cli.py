@@ -65,8 +65,8 @@ def test_main_report_json_writes_file(tmp_path, capsys):
     assert code == 0
     assert out.exists()
     data = json.loads(out.read_text(encoding="utf-8"))
-    # sample_orders 有 4 条规则（not_null/unique/range/row_count），全过 → 4
-    assert data["passed_checks"] == 4
+    # sample_orders 有 5 条规则（not_null/unique/range/allowed_values/row_count），全过 → 5
+    assert data["passed_checks"] == 5
     assert data["failed_checks"] == 0
     assert "Report written to" in capsys.readouterr().out
 

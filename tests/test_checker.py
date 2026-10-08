@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from core.checker import (
+    check_allowed_values,
     check_not_null,
     check_range,
     check_row_count,
@@ -311,3 +312,32 @@ def test_zscore_ignores_nulls():
     result = check_zscore(series)
     assert result["passed"] is False
     assert result["outlier_count"] == 1
+
+
+def test_allowed_values_passes_when_all_in_set():
+    """全部值都在允许集合内 → 通过。"""
+    series = pd.Series(["pending", "shipped", "delivered"])
+    result = check_allowed_values(
+        series, allowed_values=["pending", "shipped", "delivered", "cancelled"]
+    )
+    assert result["passed"] is True
+    assert result["disallowed_count"] == 0
+    assert result["total_count"] == 3
+    assert result["disallowed_ratio"] == 0.0
+
+
+def test_allowed_values_fails_on_out_of_set():
+    """混入集合外的值（拼错的 shippedd）→ 失败，精确数出违规个数。"""
+    series = pd.Series(["pending", "shippedd", "delivered"])
+    result = check_allowed_values(series, allowed_values=["pending", "shipped", "delivered"])
+    assert result["passed"] is False
+    assert result["disallowed_count"] == 1
+    assert result["disallowed_ratio"] == round(1 / 3, 4)
+
+
+def test_allowed_values_ignores_null():
+    """空值不算违规（空值是"没填"不是"填错"，和 unique/zscore 口径一致）。"""
+    series = pd.Series(["pending", None, "cancelled"])
+    result = check_allowed_values(series, allowed_values=["pending", "shipped", "cancelled"])
+    assert result["passed"] is True
+    assert result["disallowed_count"] == 0

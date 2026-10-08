@@ -12,6 +12,7 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 | 列级 | `not_null` | 非空检查 |
 | 列级 | `unique` | 唯一性检查（空值不算重复） |
 | 列级 | `range` | 数值范围检查 `[min_value, max_value]`（边界值合法） |
+| 列级 | `allowed_values` | 枚举值检查：值必须属于给定集合（空值不算违规） |
 | 表级 | `row_count` | 最少行数检查 `min_rows` |
 | 列级 | `zscore` | 统计异常检测（\|z\| > threshold，默认 3σ，边界由数据自动算出） |
 
@@ -56,6 +57,7 @@ Table: sample_orders
 [PASS] order_id :: not_null  (null_count=0, total_count=3, null_ratio=0.0)
 [PASS] order_id :: unique  (duplicate_count=0, total_count=3, duplicate_ratio=0.0)
 [PASS] amount :: range  (out_of_range_count=0, total_count=3, ...)
+[PASS] status :: allowed_values  (disallowed_count=0, total_count=3, ...)
 [PASS] table :: row_count  (row_count=3, min_rows=1)
 ```
 
