@@ -19,9 +19,9 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 - **契约测试**：YAML 里声明的每条规则，必须有对应实现且参数匹配（`tests/test_config_loader.py`），CI 每次跑测试自动拦截「配置写了、代码没写」的情况
 - **Fail fast**：配置里出现未知规则名直接抛 `ValueError`，不静默跳过
 - **CLI 入口**：`dqm --table <表名> --data <csv>`，有规则失败时退出码 1，可直接接 CI / Airflow 调度
-- **CI**：GitHub Actions 每次 push / PR 自动跑 ruff + pytest + CLI 冒烟测试
 - **统计异常检测**：`zscore` 规则按「均值±Nσ」自动找离群点，适合无固定边界的列（流量、延迟、成交量）
 - **结果导出**：`--report json|markdown` 把检查结果写成报告文件（JSON 给程序、Markdown 给人），可归档、可对比历史
+- **CI**：GitHub Actions 每次 push / PR 自动跑 ruff + pytest + CLI 冒烟测试
 
 ## 快速开始
 
@@ -42,7 +42,6 @@ dqm --table sample_orders --data data/sample_orders_bad.csv
 
 # 4. 检查空表 → 表级 row_count 规则 FAIL
 dqm --table sample_orders --data data/sample_orders_empty.csv
-```
 
 # 5. 导出报告文件（JSON / Markdown）
 dqm --table sample_orders --data data/sample_orders.csv --report json --output report.json
@@ -78,9 +77,11 @@ data-quality-monitor/
 ├── core/
 │   ├── __init__.py
 │   ├── checker.py             ← 规则引擎：检查函数 + 分派表 + run_checks调度
-│   ├── cli.py                 ← 把配置、数据、检查串成一条链，命令行入口：dqm --table --data                         ← 存放的是测试数据，即我们这套流程的原材料
+│   │                            每条规则怎么判（分派表 + 检查函数 + 调度）。cli 只负责把表和列「递」给它
+│   ├── cli.py                 ← 把配置、数据、检查串成一条链，命令行入口：dqm --table --data
+│   │                            它决定**数据往哪流、按什么顺序流、最后给什么退出码
 │   └── config_loader.py       ← 把yaml转化成python可读，读 rules.yaml 返回字典
-├── data/                      ← 示例数据（正常 / 违规 / 空表 三种 CSV）
+├── data/                      ← 存放的是测试数据，即我们的目标数据
 ├── tests/
 │   ├── __init__.py
 │   ├── test_checker.py        ← 检查逻辑单元测试，检查函数行为对不对，

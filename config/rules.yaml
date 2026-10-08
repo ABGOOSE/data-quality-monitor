@@ -1,3 +1,6 @@
+#YAML 加载到 Python 后，通常就是「字典套字典套列表」的结构。
+
+
 tables:
   sample_orders:
     columns:
@@ -10,12 +13,11 @@ tables:
           max_value: 1000000
     # 表级规则：作用在整个表上。
     # 参数键名 min_rows 必须和 check_row_count 的函数签名对齐，契约测试会守住这一点
+    checks:
+      - rule: row_count
+        min_rows: 1
   sample_metrics:
     columns:
       request_count:
         - rule: zscore
           threshold: 3
-
-    checks:
-      - rule: row_count
-        min_rows: 1

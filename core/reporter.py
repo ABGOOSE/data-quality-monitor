@@ -1,3 +1,4 @@
+#把检查结果写成文件
 """Export check results to report files (JSON / Markdown).
 
 把 run_checks 的结果从"终端一闪而过"变成"可归档的文件"：
@@ -8,14 +9,14 @@
 """
 
 import json
-from datetime import datetime
+from datetime import datetime  #生成报告时间戳
 from pathlib import Path
 
 # 元信息键：描述这条结果本身（什么规则、过没过、哪一列），不是检查指标。
 # 渲染详情时跳过它们，和 cli.py 的 _META_KEYS 是同一套约定。
 _META_KEYS = {"rule", "passed", "column"}
 
-
+#辅助函数
 def _format_detail(result: dict) -> str:
     """把一条结果里的指标键值对拼成 "key=value, key=value" 明细串。
 
@@ -26,7 +27,7 @@ def _format_detail(result: dict) -> str:
         f"{key}={value}" for key, value in result.items() if key not in _META_KEYS
     )
 
-
+#统一处理"目标名"的显示。
 def _target_name(result: dict) -> str:
     """结果的目标名：列级规则是列名，表级规则（column=None）显示为 table。"""
     return result["column"] if result["column"] is not None else "table"
@@ -69,7 +70,7 @@ def export_json(
         "results": results,
     }
     output_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2), #**`indent=2`**：缩进两格
         encoding="utf-8",
     )
     return output_path
@@ -104,10 +105,11 @@ def export_markdown(
         lines.append(
             f"| {status} | {_target_name(result)} | {result['rule']} | {_format_detail(result)} |"
         )
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    output_path.write_text("\n".join(lines), encoding="utf-8")  
+    #Windows 默认编码是 GBK，不指定 UTF-8 写中文会乱码。显式指定 encoding 是 "跨平台正确性" 的标准动作
     return output_path
 
-
+#核心
 def export_report(
     results: list[dict],
     fmt: str,

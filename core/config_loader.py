@@ -1,5 +1,5 @@
 """Load quality rules from YAML config files."""
-
+#把rules.yaml 里的规则加载到 Python 里，变成字典套字典套列表的结构。
 from pathlib import Path
 
 import yaml
@@ -23,5 +23,5 @@ def load_rules(path: str | Path) -> dict:
     # Args:：描述参数 path 的含义。
     # Returns:：描述返回值，并给出示例结
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f)  # 返回一个 dict
     # 调用 yaml.safe_load 解析文件内容（安全的 YAML 加载，避免执行任意代码），并将解析后的 Python 对象（这里是字典）作为函数返回值返回
