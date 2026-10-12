@@ -1,5 +1,6 @@
 """Load quality rules from YAML config files."""
-#把rules.yaml 里的规则加载到 Python 里，变成字典套字典套列表的结构。
+
+# 把rules.yaml 里的规则加载到 Python 里，变成字典套字典套列表的结构。
 from pathlib import Path
 
 import yaml

@@ -112,8 +112,6 @@ def check_row_count(df: pd.DataFrame, min_rows: int = 1) -> dict:
     }
 
 
-
-
 # 统计异常检测规则：z = (x - mean) / std，|z| > threshold 的值判为离群。
 # 和 range 的区别：边界不是人写的，是数据自己算的（均值±Nσ），
 # 适合"不知道正常范围是多少"的列（流量、延迟、成交量）。
@@ -171,6 +169,7 @@ def check_zscore(series: pd.Series, threshold: float = 3.0) -> dict:
         "outlier_ratio": round(outlier_count / total_count, 4) if total_count > 0 else 0,
         "threshold": threshold,
     }
+
 
 # 枚举值检查规则：列的值必须属于给定集合（订单状态、渠道、性别这种"只能填固定几项"的列）。
 # 和 range 的区别：range 管数值边界（大小），allowed_values 管枚举集合（是不是这几个选项之一）。

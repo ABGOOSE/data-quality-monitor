@@ -259,6 +259,7 @@ def test_run_checks_unknown_table_rule_raises():
     with pytest.raises(ValueError, match="no_such_rule"):
         run_checks(df, table_rules)
 
+
 # ---------- 统计异常检测 check_zscore ----------
 # z-score：z = (x - mean) / std，|z| > threshold 的值判为离群。
 # 和 range 的区别：边界不是人写的，是数据自己算的（均值±Nσ）。

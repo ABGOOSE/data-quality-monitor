@@ -5,45 +5,48 @@
 新增规则时 cli **一行都不用改**—— 因为它不拥有规则知识
 """
 
-import argparse  #命令行参数解析器，读懂用户敲了什么命令          进入命令
-import sys  #是「访问 Python 解释器本身」的接口，你和解释器的对讲机      退出码、错误通道
-from datetime import datetime  #生成报告文件名的时间戳
-from pathlib import Path  #路径处理
+import argparse  # 命令行参数解析器，读懂用户敲了什么命令          进入命令
+import sys  # 是「访问 Python 解释器本身」的接口，你和解释器的对讲机      退出码、错误通道
+from datetime import datetime  # 生成报告文件名的时间戳
+from pathlib import Path  # 路径处理
 
-import pandas as pd  #读 CSV
+import pandas as pd  # 读 CSV
 
-from core.checker import run_checks  #从 core/checker.py 里导入 run_checks 函数，负责执行检查逻辑
+from core.checker import run_checks  # 从 core/checker.py 里导入 run_checks 函数，负责执行检查逻辑
 from core.config_loader import (
-    load_rules,  #从 core/config_loader.py 里导入 load_rules 函数，负责加载规则配置
+    load_rules,  # 从 core/config_loader.py 里导入 load_rules 函数，负责加载规则配置
 )
 from core.reporter import (
-    export_report,  #从 core/reporter.py 里导入 export_report，负责把结果导出成报告文件（--report 用）
+    export_report,  # 从 core/reporter.py 里导入 export_report，负责把结果导出成报告文件（--report 用）
 )
 
-#2 个常量：DEFAULT_CONFIG（配置文件在哪）、_META_KEYS（哪些键是元信息）
+# 2 个常量：DEFAULT_CONFIG（配置文件在哪）、_META_KEYS（哪些键是元信息）
 # 默认配置文件路径：用 __file__ 动态定位，而不是写死相对路径。
 # __file__ 是当前文件的路径；.resolve() 转成绝对路径；
 # .parents[1] 是"上一级的上一级"——parents[0] 是 core/，parents[1] 就是项目根。
 # 这样无论从哪个目录运行 dqm，都能找到 config/rules.yaml。
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "rules.yaml"  #配置yaml文件的路径
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "rules.yaml"  # 配置yaml文件的路径
 
 # 结果字典里的"元信息"键：它们描述这条结果本身（什么规则、过没过、哪一列），
 # 不是检查出来的指标（如 null_count）。格式化输出时跳过，只展示真正的指标。
 _META_KEYS = {"rule", "passed", "column"}
 
+
 # ============ 业务区 1：声明命令收哪些参数 ============
-#函数① build_parser()：声明 dqm 收哪些参数（--table / --data / --config）
-def build_parser() -> argparse.ArgumentParser:  #为 dqm 命令构建 argparse 解析器。
+# 函数① build_parser()：声明 dqm 收哪些参数（--table / --data / --config）
+def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 解析器。
     """Build the argparse parser for the dqm command.
 
     argparse 三件套：创建解析器 -> add_argument 声明参数 -> parse_args 解析。
     声明参数后，--help 说明、缺参报错、拼错参数名提示都是白送的，不用自己写 if。
     """
     # prog 和 description 会出现在 --help 输出里
-    #调用其他工具包的函数，然后用参数传参
-    parser = argparse.ArgumentParser(  # argparse.ArgumentParser(...) 是 Python 标准库里早就写好的一个类
-        prog="dqm",
-        description="Run data quality checks defined in rules.yaml against a CSV file.",
+    # 调用其他工具包的函数，然后用参数传参
+    parser = (
+        argparse.ArgumentParser(  # argparse.ArgumentParser(...) 是 Python 标准库里早就写好的一个类
+            prog="dqm",
+            description="Run data quality checks defined in rules.yaml against a CSV file.",
+        )
     )
     # 每个 add_argument 声明一个命令行参数；required=True 表示不传就直接报错退出
     parser.add_argument("--table", required=True, help="Table name defined in rules.yaml")
@@ -70,7 +73,9 @@ def build_parser() -> argparse.ArgumentParser:  #为 dqm 命令构建 argparse �
         help="Report output path (used with --report; default: report_<table>_<timestamp>.json/md)",
     )
     return parser
-#一个无参数、有返回值、无副作用的工厂函数——典型的"创建 → 配置 → 返回"三步结构
+
+
+# 一个无参数、有返回值、无副作用的工厂函数——典型的"创建 → 配置 → 返回"三步结构
 #  ┌──────────┬──────────────────────────────┬───────────────────────────────────────────────────────────────────┐
 #  │   步骤   │             代码             │                               说明                                │
 #  ├──────────┼──────────────────────────────┼───────────────────────────────────────────────────────────────────┤
@@ -80,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:  #为 dqm 命令构建 argparse �
 #  ├──────────┼──────────────────────────────┼───────────────────────────────────────────────────────────────────┤
 #  │ 返回对象 │ return parser                │ 把配好的解析器交给调用者                                          │
 #  └──────────┴──────────────────────────────┴───────────────────────────────────────────────────────────────────┘
+
 
 def _default_report_path(table: str, fmt: str) -> Path:
     """没传 --output 时自动命名：report_<表名>_<时间戳>.<后缀>，放在当前目录。
@@ -93,7 +99,7 @@ def _default_report_path(table: str, fmt: str) -> Path:
 
 
 def render_results(table: str, results: list[dict]) -> str:
-#函数② render_results()：把结果列表格式化成「[PASS] order_id :: not_null (...)」
+    # 函数② render_results()：把结果列表格式化成「[PASS] order_id :: not_null (...)」
     """Format check results as terminal-friendly text.
 
     Example:
@@ -101,7 +107,7 @@ def render_results(table: str, results: list[dict]) -> str:
         [FAIL] amount :: range  (out_of_range_count=1, ...)
         [FAIL] table :: row_count  (row_count=0, min_rows=1)
     """
-    lines = [f"Table: {table}", "-" * 60] #样式美化用的
+    lines = [f"Table: {table}", "-" * 60]  # 样式美化用的
     ##['Table: 2', '------------------------------------------------------------']
     for result in results:
         # 三元表达式：一行版的 if-else，条件为真取前面，为假取后面
@@ -119,9 +125,10 @@ def render_results(table: str, results: list[dict]) -> str:
         lines.append(line)
     return "\n".join(lines)
 
+
 # ============ 固定骨架：总指挥五段式（基本不用改） ============
 def main(argv: list[str] | None = None) -> int:
-#函数③ main()：总指挥，五段式（解析→加载→校验→执行→收尾）
+    # 函数③ main()：总指挥，五段式（解析→加载→校验→执行→收尾）
     """Run the CLI and return the process exit code.
 
     Exit codes:
@@ -131,15 +138,17 @@ def main(argv: list[str] | None = None) -> int:
     """
     # argv 参数平时是 None，parse_args 自己去读真正的命令行给；
     # 测试时可以传 ["--table", "x", "--data", "y"] 模拟命令行，不用真的起子进程
-    args = build_parser().parse_args(argv) #得到一个装满目标参数的特制容器args，这三个参数就是前面定义的build_parser
+    args = build_parser().parse_args(
+        argv
+    )  # 得到一个装满目标参数的特制容器args，这三个参数就是前面定义的build_parser
     """
     parser = build_parser()            # 第 1 步：调函数，拿回 parser 对象
     args = parser.parse_args(argv)     # 第 2 步：调对象的方法，拿回 args
     args = ...                         # 第 3 步：存起来
     """
     rules = load_rules(args.config)
-    #检验表名
-    if args.table not in rules.get("tables", {}): #字典.get(键, 默认值)是字典的安全取值方法看【
+    # 检验表名
+    if args.table not in rules.get("tables", {}):  # 字典.get(键, 默认值)是字典的安全取值方法看【
         # 错误信息走 stderr（错误输出通道），检查报告走 stdout（标准输出通道）。
         # 两个通道分开，脚本和 CI 才能把"正常输出"和"报错"分别捕获。
         print(f"Error: table '{args.table}' not found in {args.config}", file=sys.stderr)
@@ -168,10 +177,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-#开关：if __name__ == "__main__" → sys.exit(main())
+    # 开关：if __name__ == "__main__" → sys.exit(main())
     # 这个 if 的作用：python -m core.cli 时执行 main；被 import 时只拿函数不执行。
     # sys.exit(数字) 把数字变成进程退出码，CI / 调度系统靠它判断这次检查成败。
     sys.exit(main())
-   #  ③④ 步的 return 2 = 命令没跑成（表名写错 / 文件找不到）→ 老板要查命令
-    # ⑦ 的 return 1 = 检查跑完了但数据不合格 → 老板要查数据
-    # —— CI 靠这个数字决定：是修命令，还是催人修数据
+#  ③④ 步的 return 2 = 命令没跑成（表名写错 / 文件找不到）→ 老板要查命令
+# ⑦ 的 return 1 = 检查跑完了但数据不合格 → 老板要查数据
+# —— CI 靠这个数字决定：是修命令，还是催人修数据

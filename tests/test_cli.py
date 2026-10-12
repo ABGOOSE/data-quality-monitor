@@ -43,9 +43,7 @@ def test_main_unknown_table_returns_two(capsys):
 
 def test_main_missing_file_returns_two(capsys):
     """数据文件不存在：返回 2。"""
-    code = main(
-        ["--table", "sample_orders", "--data", str(PROJECT_ROOT / "data" / "nope.csv")]
-    )
+    code = main(["--table", "sample_orders", "--data", str(PROJECT_ROOT / "data" / "nope.csv")])
     assert code == 2
     err = capsys.readouterr().err
     assert "not found" in err
@@ -56,10 +54,14 @@ def test_main_report_json_writes_file(tmp_path, capsys):
     out = tmp_path / "r.json"
     code = main(
         [
-            "--table", "sample_orders",
-            "--data", str(GOOD_CSV),
-            "--report", "json",
-            "--output", str(out),
+            "--table",
+            "sample_orders",
+            "--data",
+            str(GOOD_CSV),
+            "--report",
+            "json",
+            "--output",
+            str(out),
         ]
     )
     assert code == 0
@@ -76,10 +78,14 @@ def test_main_report_keeps_exit_code_one(tmp_path):
     out = tmp_path / "r.md"
     code = main(
         [
-            "--table", "sample_orders",
-            "--data", str(BAD_CSV),
-            "--report", "markdown",
-            "--output", str(out),
+            "--table",
+            "sample_orders",
+            "--data",
+            str(BAD_CSV),
+            "--report",
+            "markdown",
+            "--output",
+            str(out),
         ]
     )
     assert code == 1
