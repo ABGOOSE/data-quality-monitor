@@ -14,6 +14,9 @@ tables:
       status:
         - rule: allowed_values
           allowed_values: [pending, shipped, delivered, cancelled]
+      remark:
+        - rule: null_ratio
+          max_ratio: 0.4
     # 表级规则：作用在整个表上。
     # 参数键名 min_rows 必须和 check_row_count 的函数签名对齐，契约测试会守住这一点
     checks:

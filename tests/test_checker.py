@@ -6,6 +6,7 @@ import pytest
 from core.checker import (
     check_allowed_values,
     check_not_null,
+    check_null_ratio,
     check_range,
     check_row_count,
     check_unique,
@@ -342,3 +343,54 @@ def test_allowed_values_ignores_null():
     result = check_allowed_values(series, allowed_values=["pending", "shipped", "cancelled"])
     assert result["passed"] is True
     assert result["disallowed_count"] == 0
+
+
+# ---------- 缺失率阈值 check_null_ratio ----------
+# 和 not_null 的区别：not_null 是"零容忍"（一个空就失败），
+# null_ratio 是"有容忍度"（缺失率超过 max_ratio 才失败）。
+# 判定口径：null_ratio > max_ratio 才 FAIL；恰好等于 → PASS。
+# （max_ratio 是容忍上限，没超就不误报，与 zscore"严格大于"口径一致）
+def test_null_ratio_below_threshold_passes():
+    """缺失率低于阈值 → 通过。"""
+    series = pd.Series([1, None, 3, 4, 5])  # 1 个空 / 5 行 = 0.2
+    result = check_null_ratio(series, max_ratio=0.3)
+    assert result["passed"] is True
+    assert result["null_count"] == 1
+    assert result["total_count"] == 5
+    assert result["null_ratio"] == 0.2
+
+
+def test_null_ratio_above_threshold_fails():
+    """缺失率超过阈值 → 失败，精确断言比率。"""
+    series = pd.Series([None, None, None, 4, 5])  # 3 个空 / 5 行 = 0.6
+    result = check_null_ratio(series, max_ratio=0.3)
+    assert result["passed"] is False
+    assert result["null_count"] == 3
+    assert result["total_count"] == 5
+    assert result["null_ratio"] == 0.6
+    assert result["max_ratio"] == 0.3
+
+
+def test_null_ratio_boundary_equal_passes():
+    """恰好等于 max_ratio → 通过（容忍上限没超，和 zscore 严格> 口径一致）。"""
+    series = pd.Series([None, None, 3, 4, 5])  # 2 个空 / 5 行 = 0.4
+    result = check_null_ratio(series, max_ratio=0.4)
+    assert result["passed"] is True
+    assert result["null_ratio"] == 0.4
+
+
+def test_null_ratio_all_null_does_not_crash():
+    """全缺失 → 不崩，比率 1.0，超过任何正常阈值 → 失败。"""
+    series = pd.Series([None, None, None])
+    result = check_null_ratio(series, max_ratio=0.9)
+    assert result["passed"] is False
+    assert result["null_count"] == 3
+    assert result["null_ratio"] == 1.0
+
+
+def test_null_ratio_empty_series_passes():
+    """空表（0 行）→ 比率 0.0，通过，不除零崩溃。"""
+    series = pd.Series([], dtype=float)
+    result = check_null_ratio(series, max_ratio=0.5)
+    assert result["passed"] is True
+    assert result["null_ratio"] == 0.0

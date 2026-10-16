@@ -13,6 +13,7 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 | 列级 | `unique` | 唯一性检查（空值不算重复） |
 | 列级 | `range` | 数值范围检查 `[min_value, max_value]`（边界值合法） |
 | 列级 | `allowed_values` | 枚举值检查：值必须属于给定集合（空值不算违规） |
+| 列级 | `null_ratio` | 缺失率阈值检查：缺失率 ≤ `max_ratio` 通过（恰好等于容忍上限不违规） |
 | 表级 | `row_count` | 最少行数检查 `min_rows` |
 | 列级 | `zscore` | 统计异常检测（\|z\| > threshold，默认 3σ，边界由数据自动算出） |
 
@@ -105,7 +106,9 @@ ruff format .   # 代码格式化
 ## Roadmap
 
 - [x] 统计异常检测（z-score / 均值±Nσ）
-- [ ] 更多规则：`regex`、`allowed_values`、`null_ratio` 阈值
+- [ ] 更多规则：`regex`
+- [x] 枚举值检查（allowed_values）
+- [x] 缺失率阈值（null_ratio）
 - [x] 结果导出（JSON / Markdown 报告）
 - [ ] 告警（Webhook 通知）
 - [ ] 接入 Airflow 定时调度

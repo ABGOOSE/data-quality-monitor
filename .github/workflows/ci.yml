@@ -1,5 +1,5 @@
 name: CI
-
+#ci 不是调用的，是触发，触发器
 # 触发时机：push 到 main、以及任何 pull request 都会跑一遍
 on:
   push:

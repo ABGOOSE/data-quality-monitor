@@ -1,4 +1,4 @@
-order_id,amount,status
-1001,150.00,pending
-1002,3200.50,shipped
-1003,89.90,delivered
+order_id,amount,status,remark
+1001,150.00,pending,老客户
+1002,3200.50,shipped,
+1003,89.90,delivered,批量订单

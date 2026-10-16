@@ -29,6 +29,35 @@ def check_not_null(series: pd.Series) -> dict:
     }
 
 
+def check_null_ratio(series: pd.Series, max_ratio: float) -> dict:
+    """Check if the null ratio exceeds max_ratio.
+
+    Args:
+        series: A pandas Series to check.
+        max_ratio: Maximum allowed null ratio (0.0-1.0).
+
+    Returns:
+        A dict with check result:
+        - passed: True if null_ratio <= max_ratio (at the limit is OK)
+        - null_count: number of null values
+        - total_count: total number of rows
+        - null_ratio: ratio of null values
+        - max_ratio: the threshold used for the check
+    """
+    total_count = len(series)
+    null_count = int(series.isna().sum())
+    # 分母保护：0 行时比率定为 0（不能除零）
+    null_ratio = round(null_count / total_count, 4) if total_count > 0 else 0
+    return {
+        "rule": "null_ratio",
+        "passed": null_ratio <= max_ratio,  # 恰好等于 = 容忍上限没超 = 通过
+        "null_count": null_count,
+        "total_count": total_count,
+        "null_ratio": null_ratio,
+        "max_ratio": max_ratio,
+    }
+
+
 def check_unique(series: pd.Series) -> dict:
     """Check if a series contains duplicate non-null values.
 
@@ -216,6 +245,7 @@ RULE_FUNCTIONS = {
     "range": check_range,
     "zscore": check_zscore,
     "allowed_values": check_allowed_values,
+    "null_ratio": check_null_ratio,
 }
 
 # 表级分派表：单独一张表，因为函数签名不同——收 DataFrame，不是 Series。
