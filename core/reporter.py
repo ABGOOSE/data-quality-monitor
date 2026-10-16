@@ -62,15 +62,17 @@ def export_json(
     # 时间戳可注入：默认取当前时间，测试传固定值才能断言精确内容
     if generated_at is None:
         # astimezone() 给 naive datetime 加上本地时区，满足 ruff DTZ005（时间戳必须带时区）
-        generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        generated_at = (
+            datetime.now().astimezone().isoformat(timespec="seconds")
+        )  # datetime.now()：获取当前本地时间。 .astimezone()：转换为带时区信息的 datetime。.isoformat(timespec="seconds")：格式化为 ISO 8601 字符串，精确到秒。
     payload = {
         "table": table_name,
         "generated_at": generated_at,
-        **_summary(results),
+        **_summary(results),  # 字典解包，把 _summary 返回的字典合并进来。
         "results": results,
     }
-    output_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),  # **`indent=2`**：缩进两格
+    output_path.write_text(  # Path 对象的方法，直接写入文本。
+        json.dumps(payload, ensure_ascii=False, indent=2),  # indent=2：JSON 缩进两格，层级分明好看；ensure_ascii=False 让中文正常显示
         encoding="utf-8",
     )
     return output_path
