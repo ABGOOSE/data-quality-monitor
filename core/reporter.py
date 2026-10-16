@@ -72,7 +72,9 @@ def export_json(
         "results": results,
     }
     output_path.write_text(  # Path 对象的方法，直接写入文本。
-        json.dumps(payload, ensure_ascii=False, indent=2),  # indent=2：JSON 缩进两格，层级分明好看；ensure_ascii=False 让中文正常显示
+        json.dumps(
+            payload, ensure_ascii=False, indent=2
+        ),  # indent=2：JSON 缩进两格，层级分明好看；ensure_ascii=False 让中文正常显示
         encoding="utf-8",
     )
     return output_path
