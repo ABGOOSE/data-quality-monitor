@@ -14,7 +14,11 @@ from core.checker import (
     run_checks,
 )
 
+# ==================== check_not_null：非空检查（一个空都不能有）====================
+# 测法：造数据 → 跑函数 → 断言结果。三个测试覆盖三种场景：全有值 / 有空值 / 空表。
 
+
+# 场景1：全有值 → 应该通过
 def test_not_null_all_valid():
     """When no null values, check should pass."""
     series = pd.Series([1, 2, 3, 4, 5])
@@ -25,6 +29,7 @@ def test_not_null_all_valid():
     assert result["null_ratio"] == 0.0
 
 
+# 场景2：有 2 个空 → 应该失败，并精确数出 null_count=2
 def test_not_null_with_nulls():
     """When null values exist, check should fail and count correctly."""
     series = pd.Series([1, None, 3, None, 5])
@@ -35,6 +40,7 @@ def test_not_null_with_nulls():
     assert result["null_ratio"] == 0.4
 
 
+# 场景3：空表（0 行）→ 不崩，通过 + 比率 0.0（防除零）
 def test_not_null_empty_series():
     """Empty series should pass with zero counts."""
     series = pd.Series([], dtype=float)
@@ -45,6 +51,11 @@ def test_not_null_empty_series():
     assert result["null_ratio"] == 0.0
 
 
+# ==================== check_unique：唯一性检查（空值不算重复）====================
+# 四个测试：全不重复 / 有重复 / 空值不参与 / 空表
+
+
+# 场景1：全不重复 → 通过
 def test_unique_all_distinct():
     """When all non-null values are distinct, check should pass."""
     series = pd.Series([1, 2, 3, 4, 5])
@@ -55,6 +66,7 @@ def test_unique_all_distinct():
     assert result["duplicate_ratio"] == 0.0
 
 
+# 场景2：有重复（第二个起算）→ 失败，数出 duplicate_count=3
 def test_unique_with_duplicates():
     """Duplicates should be counted (second and later occurrences)."""
     series = pd.Series([1, 2, 2, 3, 3, 3])
@@ -65,6 +77,7 @@ def test_unique_with_duplicates():
     assert result["duplicate_ratio"] == 0.5
 
 
+# 场景3：空值不算重复（两个 None 不是重复）→ 通过
 def test_unique_ignores_nulls():
     """Null values are not considered duplicates."""
     series = pd.Series([None, None, 1])
@@ -73,6 +86,7 @@ def test_unique_ignores_nulls():
     assert result["duplicate_count"] == 0
 
 
+# 场景4：空表 → 通过，计数为 0
 def test_unique_empty_series():
     """Empty series should pass with zero counts."""
     series = pd.Series([], dtype=float)
@@ -82,6 +96,11 @@ def test_unique_empty_series():
     assert result["total_count"] == 0
 
 
+# ==================== check_range：数值范围检查 [min, max]（边界值合法）====================
+# 五个测试：全在范围内 / 越界 / 恰好等于边界 / 空值不参与 / 空表
+
+
+# 场景1：全在 [0, 1000000] 内 → 通过
 def test_range_all_within():
     """All values within [min, max] should pass."""
     series = pd.Series([1, 5, 100, 1000000])
@@ -90,6 +109,7 @@ def test_range_all_within():
     assert result["out_of_range_count"] == 0
 
 
+# 场景2：有越界（-1 和 2000000）→ 失败，数出 2 个
 def test_range_with_outliers():
     """Values below min or above max are violations."""
     series = pd.Series([-1, 5, 2000000])
@@ -99,6 +119,7 @@ def test_range_with_outliers():
     assert result["total_count"] == 3
 
 
+# 场景3：恰好 = min 或 max → 合法（防 >= 误写成 > 的 bug）
 def test_range_boundary_values_pass():
     """Values exactly at min or max are not violations."""
     series = pd.Series([0, 1000000])
@@ -107,6 +128,7 @@ def test_range_boundary_values_pass():
     assert result["out_of_range_count"] == 0
 
 
+# 场景4：空值不参与范围判断 → 通过
 def test_range_ignores_nulls():
     """Null values are not range violations."""
     series = pd.Series([None, 5, 100])
@@ -115,6 +137,7 @@ def test_range_ignores_nulls():
     assert result["out_of_range_count"] == 0
 
 
+# 场景5：空表 → 通过，不崩
 def test_range_empty_series():
     """Empty series should pass with zero counts."""
     series = pd.Series([], dtype=float)
@@ -125,6 +148,11 @@ def test_range_empty_series():
 
 # ---------- 表级规则 check_row_count ----------
 # 表级规则收的是整个 DataFrame。测法思路和列级一样：通过 / 失败 / 边界 / 空表四件套。
+# ==================== check_row_count：最少行数检查（表级，收整个 DataFrame）====================
+# 四个测试：行数够 / 行数不够 / 恰好等于 min_rows / 空表
+
+
+# 场景1：行数够 → 通过
 def test_row_count_pass():
     """A table with enough rows should pass."""
     df = pd.DataFrame({"a": [1, 2, 3]})
@@ -133,6 +161,7 @@ def test_row_count_pass():
     assert result["row_count"] == 3
 
 
+# 场景2：行数不够 → 失败
 def test_row_count_fail():
     """A table with too few rows should fail."""
     df = pd.DataFrame({"a": [1]})
@@ -141,6 +170,7 @@ def test_row_count_fail():
     assert result["row_count"] == 1
 
 
+# 场景3：恰好 = min_rows → 合法（防 >= 误写成 > 的 bug）
 def test_row_count_boundary_passes():
     """Exactly min_rows rows is not a violation."""
     # 边界值测试：min_rows 本身是合法的。这类测试专门抓 >= 误写成 > 的 bug
@@ -149,6 +179,7 @@ def test_row_count_boundary_passes():
     assert result["passed"] is True
 
 
+# 场景4：空表 + min_rows=1 → 失败（0 行不满足最少 1 行）
 def test_row_count_empty_table():
     """An empty table fails when min_rows > 0."""
     df = pd.DataFrame()
@@ -157,6 +188,11 @@ def test_row_count_empty_table():
     assert result["row_count"] == 0
 
 
+# ==================== run_checks：规则引擎本身（分派列级 + 表级规则）====================
+# 八个测试：全过 / 检测违规 / 跳过缺失列 / 表级规则在跑 / 空表失败 / 结果带列名 / 未知规则报错×2
+
+
+# 场景1：干净数据 → 所有规则通过，返回 3 条结果
 def test_run_checks_all_pass():
     """Clean data should pass all rules."""
     df = pd.DataFrame(
@@ -176,6 +212,7 @@ def test_run_checks_all_pass():
     assert all(r["passed"] for r in results)
 
 
+# 场景2：脏数据 → 逐条报告违规（验证顺序：not_null 失败、unique 通过、range 失败）
 def test_run_checks_detects_violations():
     """Violations should be reported per rule."""
     df = pd.DataFrame(
@@ -196,6 +233,7 @@ def test_run_checks_detects_violations():
     assert results[2]["rule"] == "range" and results[2]["passed"] is False
 
 
+# 场景3：配置声明了但数据里没这列 → 跳过不崩（只返回 1 条结果）
 def test_run_checks_skips_missing_columns():
     """Columns not in the DataFrame should be skipped, not crash."""
     df = pd.DataFrame({"order_id": [1, 2]})
@@ -209,6 +247,7 @@ def test_run_checks_skips_missing_columns():
     assert len(results) == 1
 
 
+# 场景4：columns 故意留空，只放 checks → 证明表级规则第二轮真的在跑
 def test_run_checks_runs_table_rules():
     """Table-level rules in `checks` should also be executed."""
     # columns 故意留空，只放 checks：证明 run_checks 的第二轮（表级）真的在跑
@@ -224,6 +263,7 @@ def test_run_checks_runs_table_rules():
     assert results[0]["column"] is None  # 表级结果没有具体列，column 统一为 None
 
 
+# 场景5：空表 + row_count(min_rows=1) → 表级规则失败
 def test_run_checks_table_rule_fails_on_empty_table():
     """row_count on an empty DataFrame should fail."""
     df = pd.DataFrame({"order_id": pd.Series([], dtype=float)})
@@ -235,6 +275,7 @@ def test_run_checks_table_rule_fails_on_empty_table():
     assert results[0]["passed"] is False
 
 
+# 场景6：结果必须带 column 键（报告输出靠它知道结果属于哪一列）
 def test_run_checks_result_carries_column_name():
     """Each column result should carry its column name for reporting."""
     df = pd.DataFrame({"order_id": [1, 2]})
@@ -242,6 +283,7 @@ def test_run_checks_result_carries_column_name():
     assert results[0]["column"] == "order_id"  # 报告输出靠这个键知道结果属于哪一列
 
 
+# 场景7：配置声明了规则但代码没实现 → 必须大声报错（宁可崩，不静默跳过）
 def test_run_checks_unknown_column_rule_raises():
     """A declared column rule with no implementation must fail loudly."""
     df = pd.DataFrame({"order_id": [1]})
@@ -252,6 +294,7 @@ def test_run_checks_unknown_column_rule_raises():
         run_checks(df, table_rules)
 
 
+# 场景8：表级分派表同样守"未知即报错"
 def test_run_checks_unknown_table_rule_raises():
     """A declared table rule with no implementation must fail loudly."""
     # 表级规则遇到未知名字同样要大声报错——两个分派表都必须守住
@@ -265,6 +308,11 @@ def test_run_checks_unknown_table_rule_raises():
 # z-score：z = (x - mean) / std，|z| > threshold 的值判为离群。
 # 和 range 的区别：边界不是人写的，是数据自己算的（均值±Nσ）。
 # 测试六件套：检测 / 正常 / 边界严格> / 数据不足 / 零方差 / 空值
+# ==================== check_zscore：统计异常检测（|z| > threshold 判离群）====================
+# 六个测试：检测离群 / 正常通过 / 边界严格> / 数据不足 / 零方差 / 空值忽略
+
+
+# 场景1：有极端值（|z|>3）→ 失败，数出 1 个离群点
 def test_zscore_detects_outliers():
     """An extreme value (|z| > 3) should be flagged as an outlier."""
     # 10 个 10 + 1 个 100：mean≈18.2, std≈27.1 → z(100)≈3.02 > 3
@@ -276,6 +324,7 @@ def test_zscore_detects_outliers():
     assert result["total_count"] == 11
 
 
+# 场景2：小波动（正常数据）→ 通过
 def test_zscore_normal_data_passes():
     """Small fluctuations around the mean should pass."""
     series = pd.Series([1, 2, 1, 2, 1, 2])
@@ -284,6 +333,7 @@ def test_zscore_normal_data_passes():
     assert result["outlier_count"] == 0
 
 
+# 场景3：|z| 恰好 = threshold → 不算异常（严格 >，防误写成 >= 的 bug）
 def test_zscore_boundary_strict():
     """|z| exactly at threshold is NOT an outlier (strict >, not >=)."""
     # mean=2, std=1 → 1 和 3 的 |z| 恰好 = 1.0；threshold=1.0 时不算异常。
@@ -294,6 +344,7 @@ def test_zscore_boundary_strict():
     assert result["outlier_count"] == 0
 
 
+# 场景4：数据太少（<2 个非空）→ 算不出标准差 → 通过不崩
 def test_zscore_insufficient_data_passes():
     """Fewer than 2 non-null values: std undefined, no evidence, pass."""
     series = pd.Series([5])
@@ -301,6 +352,7 @@ def test_zscore_insufficient_data_passes():
     assert result["passed"] is True
 
 
+# 场景5：全部相同（方差=0）→ 无离群可找 → 通过不崩（防除零）
 def test_zscore_constant_series_passes():
     """All values identical (std=0): no variance, no outliers."""
     series = pd.Series([5, 5, 5, 5])
@@ -308,6 +360,7 @@ def test_zscore_constant_series_passes():
     assert result["passed"] is True
 
 
+# 场景6：空值不参与 z-score 离群判断
 def test_zscore_ignores_nulls():
     """Null values are not z-score violations (consistent with other rules)."""
     series = pd.Series([None] + [10.0] * 10 + [100.0])
@@ -316,6 +369,11 @@ def test_zscore_ignores_nulls():
     assert result["outlier_count"] == 1
 
 
+# ==================== check_allowed_values：枚举值检查（空值不算违规）====================
+# 三个测试：全在集合 / 混入集合外 / 空值忽略
+
+
+# 场景1：全部值都在允许集合内 → 通过
 def test_allowed_values_passes_when_all_in_set():
     """全部值都在允许集合内 → 通过。"""
     series = pd.Series(["pending", "shipped", "delivered"])
@@ -328,6 +386,7 @@ def test_allowed_values_passes_when_all_in_set():
     assert result["disallowed_ratio"] == 0.0
 
 
+# 场景2：混入集合外的值（拼错的 shippedd）→ 失败，精确数出 1 个
 def test_allowed_values_fails_on_out_of_set():
     """混入集合外的值（拼错的 shippedd）→ 失败，精确数出违规个数。"""
     series = pd.Series(["pending", "shippedd", "delivered"])
@@ -337,6 +396,7 @@ def test_allowed_values_fails_on_out_of_set():
     assert result["disallowed_ratio"] == round(1 / 3, 4)
 
 
+# 场景3：空值不算违规（空值是"没填"不是"填错"，和 unique/zscore 口径一致）
 def test_allowed_values_ignores_null():
     """空值不算违规（空值是"没填"不是"填错"，和 unique/zscore 口径一致）。"""
     series = pd.Series(["pending", None, "cancelled"])
@@ -345,11 +405,13 @@ def test_allowed_values_ignores_null():
     assert result["disallowed_count"] == 0
 
 
-# ---------- 缺失率阈值 check_null_ratio ----------
-# 和 not_null 的区别：not_null 是"零容忍"（一个空就失败），
-# null_ratio 是"有容忍度"（缺失率超过 max_ratio 才失败）。
+# ==================== check_null_ratio：缺失率阈值（容忍度检查）====================
+# 和 not_null 的区别：not_null 零容忍，null_ratio 允许缺到 max_ratio。
 # 判定口径：null_ratio > max_ratio 才 FAIL；恰好等于 → PASS。
-# （max_ratio 是容忍上限，没超就不误报，与 zscore"严格大于"口径一致）
+# 五个测试：低于阈值 / 超过阈值 / 恰好等于 / 全缺失 / 空表
+
+
+# 场景1：缺失率 0.2 < 阈值 0.3 → 通过
 def test_null_ratio_below_threshold_passes():
     """缺失率低于阈值 → 通过。"""
     series = pd.Series([1, None, 3, 4, 5])  # 1 个空 / 5 行 = 0.2
@@ -360,6 +422,7 @@ def test_null_ratio_below_threshold_passes():
     assert result["null_ratio"] == 0.2
 
 
+# 场景2：缺失率 0.6 > 阈值 0.3 → 失败，比率精确断言
 def test_null_ratio_above_threshold_fails():
     """缺失率超过阈值 → 失败，精确断言比率。"""
     series = pd.Series([None, None, None, 4, 5])  # 3 个空 / 5 行 = 0.6
@@ -371,6 +434,7 @@ def test_null_ratio_above_threshold_fails():
     assert result["max_ratio"] == 0.3
 
 
+# 场景3：缺失率恰好 = 阈值 → 通过（容忍上限没超，和 zscore 严格> 口径一致）
 def test_null_ratio_boundary_equal_passes():
     """恰好等于 max_ratio → 通过（容忍上限没超，和 zscore 严格> 口径一致）。"""
     series = pd.Series([None, None, 3, 4, 5])  # 2 个空 / 5 行 = 0.4
@@ -379,6 +443,7 @@ def test_null_ratio_boundary_equal_passes():
     assert result["null_ratio"] == 0.4
 
 
+# 场景4：全缺失 → 不崩，比率 1.0，超过任何正常阈值 → 失败
 def test_null_ratio_all_null_does_not_crash():
     """全缺失 → 不崩，比率 1.0，超过任何正常阈值 → 失败。"""
     series = pd.Series([None, None, None])
@@ -388,6 +453,7 @@ def test_null_ratio_all_null_does_not_crash():
     assert result["null_ratio"] == 1.0
 
 
+# 场景5：空表（0 行）→ 比率 0.0，通过，不除零
 def test_null_ratio_empty_series_passes():
     """空表（0 行）→ 比率 0.0，通过，不除零崩溃。"""
     series = pd.Series([], dtype=float)
