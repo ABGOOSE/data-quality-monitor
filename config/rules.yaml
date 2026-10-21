@@ -2,7 +2,7 @@
 
 
 tables:
-  sample_orders:
+  TableA:
     columns:
       order_id:
         - rule: not_null
@@ -22,8 +22,52 @@ tables:
     checks:
       - rule: row_count
         min_rows: 1
-  sample_metrics:
+  TableB:
     columns:
       request_count:
         - rule: zscore
           threshold: 3
+
+
+# ====================================================================
+# load_rules() 把本文件解析成 Python 字典后，结构如下（字典套字典套列表）：
+#
+# {
+#   "tables": {                                      # 第1层：字典
+#     "TableA": {                             # 第2层：键=表名，值=字典
+#       "columns": {                                 # 第3层：字典，键=列名
+#         "order_id": [                              # 第4层：列表，元素是规则字典
+#           {"rule": "not_null"},
+#           {"rule": "unique"},
+#         ],
+#         "amount": [
+#           {"rule": "range", "min_value": 0, "max_value": 1000000},
+#         ],
+#         "status": [
+#           {"rule": "allowed_values",
+#            "allowed_values": ["pending", "shipped", "delivered", "cancelled"]},
+#         ],
+#         "remark": [
+#           {"rule": "null_ratio", "max_ratio": 0.4},
+#         ],
+#       },
+#       "checks": [                                  # 表级规则：列表
+#         {"rule": "row_count", "min_rows": 1},
+#       ],
+#     },
+#     "TableB": {
+#       "columns": {
+#         "request_count": [
+#           {"rule": "zscore", "threshold": 3},
+#         ],
+#       },
+#     },
+#   },
+# }
+#
+# 关键对应：
+#   - yaml 的「冒号 + 缩进」→ 字典的键值对
+#   - yaml 的「-」列表项      → 列表（list）
+#   - 每个规则字典都有 "rule" 键，其余键是该规则函数的参数
+#     （参数键名必须和 core/checker.py 里的函数签名一一对应，对不上直接 TypeError）
+# ====================================================================

@@ -15,7 +15,7 @@ def load_rules(path: str | Path) -> dict:
 
     Returns:
         A dict with rule definitions, e.g.
-        {"tables": {"sample_orders": {"columns": {...}, "checks": [...]}}}
+        {"tables": {"TableA": {"columns": {...}, "checks": [...]}}}
     """
     # 上面的是文档字符串，用三引号 """...""" 括起来
     # 它紧跟在函数定义之后，用于说明函数的功能、参数和返回值。

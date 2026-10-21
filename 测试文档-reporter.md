@@ -136,7 +136,7 @@ E:\github1\data-quality-monitor\.venv\Scripts\ruff.exe check core tests
 **输入：**
 
 ```
-dqm --table sample_orders --data data\sample_orders.csv --report json --output report_demo.json
+dqm --table TableA --data data\TableA.csv --report json --output report_demo.json
 ```
 
 **成功的样子**：屏幕先打印 3 行 `[PASS]`，最后一行是：
@@ -148,7 +148,7 @@ Report written to report_demo.json
 **报错 `无法将"dqm"项识别为...`？** 用完整路径：
 
 ```
-E:\github1\data-quality-monitor\.venv\Scripts\dqm.exe --table sample_orders --data data\sample_orders.csv --report json --output report_demo.json
+E:\github1\data-quality-monitor\.venv\Scripts\dqm.exe --table TableA --data data\TableA.csv --report json --output report_demo.json
 ```
 
 ### 6.2 打开 JSON 报告看内容
@@ -162,7 +162,7 @@ Get-Content report_demo.json -Encoding UTF8
 **成功的样子**：看到里面有这几行（其他内容不用管）：
 
 ```
-"table": "sample_orders",
+"table": "TableA",
 "passed_checks": 3,
 "failed_checks": 0,
 ```
@@ -172,7 +172,7 @@ Get-Content report_demo.json -Encoding UTF8
 **输入：**
 
 ```
-dqm --table sample_orders --data data\sample_orders_bad.csv --report markdown --output report_demo.md
+dqm --table TableA --data data\TableA_bad.csv --report markdown --output report_demo.md
 ```
 
 **成功的样子**：屏幕先打印 3 行 `[FAIL]`，最后一行 `Report written to report_demo.md`。

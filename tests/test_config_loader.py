@@ -21,10 +21,10 @@ def test_load_rules_returns_dict():
 def test_load_rules_structure():
     """The loaded dict should match the YAML structure."""
     rules = load_rules(RULES_PATH)
-    order_id_rules = rules["tables"]["sample_orders"]["columns"]["order_id"]
+    order_id_rules = rules["tables"]["TableA"]["columns"]["order_id"]
     assert order_id_rules[0]["rule"] == "not_null"
     assert order_id_rules[1]["rule"] == "unique"
-    amount_rules = rules["tables"]["sample_orders"]["columns"]["amount"]
+    amount_rules = rules["tables"]["TableA"]["columns"]["amount"]
     assert amount_rules[0]["min_value"] == 0
     assert amount_rules[0]["max_value"] == 1000000
 

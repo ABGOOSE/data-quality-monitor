@@ -9,8 +9,8 @@ from core.cli import main
 
 # 项目根定位：tests/ 的上一级。用 __file__ 动态算，不写死绝对路径。
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-GOOD_CSV = PROJECT_ROOT / "data" / "sample_orders.csv"
-BAD_CSV = PROJECT_ROOT / "data" / "sample_orders_bad.csv"
+GOOD_CSV = PROJECT_ROOT / "data" / "TableA.csv"
+BAD_CSV = PROJECT_ROOT / "data" / "TableA_bad.csv"
 
 
 def test_main_all_pass_returns_zero(capsys):
@@ -19,7 +19,7 @@ def test_main_all_pass_returns_zero(capsys):
     argv 注入：main([...]) 直接传参数列表，模拟命令行，不起子进程。
     capsys 是 pytest 内置的"输出捕获器"：拿 main 里 print 的内容。
     """
-    code = main(["--table", "sample_orders", "--data", str(GOOD_CSV)])
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV)])
     assert code == 0
     out = capsys.readouterr().out
     assert "[PASS]" in out
@@ -27,7 +27,7 @@ def test_main_all_pass_returns_zero(capsys):
 
 def test_main_violations_return_one(capsys):
     """坏数据：返回 1。退出码就是 CLI 和 CI 之间的协议，必须守住。"""
-    code = main(["--table", "sample_orders", "--data", str(BAD_CSV)])
+    code = main(["--table", "TableA", "--data", str(BAD_CSV)])
     assert code == 1
     out = capsys.readouterr().out
     assert "[FAIL]" in out
@@ -43,7 +43,7 @@ def test_main_unknown_table_returns_two(capsys):
 
 def test_main_missing_file_returns_two(capsys):
     """数据文件不存在：返回 2。"""
-    code = main(["--table", "sample_orders", "--data", str(PROJECT_ROOT / "data" / "nope.csv")])
+    code = main(["--table", "TableA", "--data", str(PROJECT_ROOT / "data" / "nope.csv")])
     assert code == 2
     err = capsys.readouterr().err
     assert "not found" in err
@@ -55,7 +55,7 @@ def test_main_report_json_writes_file(tmp_path, capsys):
     code = main(
         [
             "--table",
-            "sample_orders",
+            "TableA",
             "--data",
             str(GOOD_CSV),
             "--report",
@@ -67,7 +67,7 @@ def test_main_report_json_writes_file(tmp_path, capsys):
     assert code == 0
     assert out.exists()
     data = json.loads(out.read_text(encoding="utf-8"))
-    # sample_orders 有 6 条规则（not_null/unique/range/allowed_values/null_ratio/row_count），全过 → 6
+    # TableA 有 6 条规则（not_null/unique/range/allowed_values/null_ratio/row_count），全过 → 6
     assert data["passed_checks"] == 6
     assert data["failed_checks"] == 0
     assert "Report written to" in capsys.readouterr().out
@@ -79,7 +79,7 @@ def test_main_report_keeps_exit_code_one(tmp_path):
     code = main(
         [
             "--table",
-            "sample_orders",
+            "TableA",
             "--data",
             str(BAD_CSV),
             "--report",
@@ -101,15 +101,15 @@ def test_main_report_default_output_writes_to_cwd(tmp_path, monkeypatch):
     就落在 tmp_path，不会污染项目根目录。
     """
     monkeypatch.chdir(tmp_path)
-    code = main(["--table", "sample_orders", "--data", str(GOOD_CSV), "--report", "json"])
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV), "--report", "json"])
     assert code == 0
-    files = list(tmp_path.glob("report_sample_orders_*.json"))
+    files = list(tmp_path.glob("report_TableA_*.json"))
     assert len(files) == 1
 
 
 def test_main_no_report_writes_nothing(tmp_path):
     """不传 --report：不生成任何报告文件（旧行为保持，向后兼容）。"""
-    code = main(["--table", "sample_orders", "--data", str(GOOD_CSV)])
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV)])
     assert code == 0
     assert list(tmp_path.iterdir()) == []
 
@@ -121,7 +121,7 @@ def test_main_invalid_report_format_exits_two():
     所以这里捕获 SystemExit 而不是接收返回值。
     """
     with pytest.raises(SystemExit) as excinfo:
-        main(["--table", "sample_orders", "--data", str(GOOD_CSV), "--report", "yaml"])
+        main(["--table", "TableA", "--data", str(GOOD_CSV), "--report", "yaml"])
     assert excinfo.value.code == 2
 
 
@@ -134,7 +134,7 @@ def test_default_report_path_unknown_format_raises():
     from core.cli import _default_report_path
 
     with pytest.raises(ValueError, match="Unknown report format"):
-        _default_report_path("sample_orders", "pdf")
+        _default_report_path("TableA", "pdf")
 
 
 def test_default_report_path_known_formats_have_correct_ext(monkeypatch, tmp_path):

@@ -148,13 +148,13 @@ E501 Line too long (101 > 100)
 **6.1 正常数据 → 必须全部 PASS**
 
 ```powershell
-dqm --table sample_orders --data data/sample_orders.csv
+dqm --table TableA --data data/TableA.csv
 ```
 
 **期望输出**：
 
 ```
-Table: sample_orders
+Table: TableA
 ------------------------------------------------------------
 [PASS] order_id :: not_null  (...)
 [PASS] order_id :: unique  (...)
@@ -173,7 +173,7 @@ $LASTEXITCODE
 **6.3 违规数据 → 必须有 FAIL，退出码 = 1**
 
 ```powershell
-dqm --table sample_orders --data data/sample_orders_bad.csv
+dqm --table TableA --data data/TableA_bad.csv
 $LASTEXITCODE
 #用 rules.yaml 里定义的规则，检查 orders.csv 这份数据，表名是 orders。
 ```
@@ -183,7 +183,7 @@ $LASTEXITCODE
 **6.4 最新规则：统计异常检测 → 尖峰必须被抓**
 
 ```powershell
-dqm --table sample_metrics --data data/sample_metrics.csv
+dqm --table TableB --data data/TableB.csv
 ```
 
 **期望输出**：
@@ -197,7 +197,7 @@ dqm --table sample_metrics --data data/sample_metrics.csv
 **6.5 报告导出（--report）→ 文件真的生成**
 
 ```powershell
-dqm --table sample_orders --data data/sample_orders.csv --report json --output report_demo.json
+dqm --table TableA --data data/TableA.csv --report json --output report_demo.json
 ```
 
 **期望输出**：最后一行 `Report written to report_demo.json`。
@@ -211,7 +211,7 @@ Get-Content report_demo.json -Encoding UTF8
 **期望输出**：看到 `"passed_checks": 3`。退出码仍是 0（导出不影响成败判断）。
 
 ```powershell
-dqm --table sample_orders --data data/sample_orders_bad.csv --report markdown --output report_demo.md
+dqm --table TableA --data data/TableA_bad.csv --report markdown --output report_demo.md
 ```
 
 **期望输出**：3 行 `[FAIL]` + `Report written to report_demo.md`，`$LASTEXITCODE` 是 `1`。
@@ -220,11 +220,11 @@ dqm --table sample_orders --data data/sample_orders_bad.csv --report markdown --
 
 > `dqm` 命令找不到？回到第 2 步——八成是 venv 没激活。备选方案：
 > ```powershell
-> E:\github1\data-quality-monitor\.venv\Scripts\dqm.exe --table sample_orders --data data/sample_orders.csv
+> E:\github1\data-quality-monitor\.venv\Scripts\dqm.exe --table TableA --data data/TableA.csv
 > ```
 > 或者用 python 模块方式：
 > ```powershell
-> E:\github1\data-quality-monitor\.venv\Scripts\python.exe -m core.cli --table sample_orders --data data/sample_orders.csv
+> E:\github1\data-quality-monitor\.venv\Scripts\python.exe -m core.cli --table TableA --data data/TableA.csv
 > ```
 
 ---
@@ -238,9 +238,9 @@ dqm --table sample_orders --data data/sample_orders_bad.csv --report markdown --
 | 1 | `pytest` | `53 passed` |
 | 2 | `ruff check .` | `All checks passed!` |
 | 3 | `ruff format --check .` | `All checks passed!` |
-| 4 | `dqm --table sample_orders --data data/sample_orders.csv` | 全 `[PASS]` |
+| 4 | `dqm --table TableA --data data/TableA.csv` | 全 `[PASS]` |
 | 5 | `$LASTEXITCODE`（接上条） | `0` |
-| 6 | `dqm --table sample_orders --data data/sample_orders_bad.csv` | 3 条 `[FAIL]` |
+| 6 | `dqm --table TableA --data data/TableA_bad.csv` | 3 条 `[FAIL]` |
 | 7 | `$LASTEXITCODE`（接上条） | `1` |
 
 > 这套清单和 CI（GitHub Actions）里跑的是同一套东西——本地全过，推上去 CI 才可能绿。

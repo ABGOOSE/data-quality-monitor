@@ -37,23 +37,23 @@ python -m venv .venv
 pip install -e ".[dev]"
 
 # 2. 检查正常数据 → 全部 PASS，退出码 0
-dqm --table sample_orders --data data/sample_orders.csv
+dqm --table TableA --data data/TableA.csv
 
 # 3. 检查违规数据 → 3 条 FAIL，退出码 1
-dqm --table sample_orders --data data/sample_orders_bad.csv
+dqm --table TableA --data data/TableA_bad.csv
 
 # 4. 检查空表 → 表级 row_count 规则 FAIL
-dqm --table sample_orders --data data/sample_orders_empty.csv
+dqm --table TableA --data data/TableA_empty.csv
 
 # 5. 导出报告文件（JSON / Markdown）
-dqm --table sample_orders --data data/sample_orders.csv --report json --output report.json
-dqm --table sample_orders --data data/sample_orders.csv --report markdown --output report.md
+dqm --table TableA --data data/TableA.csv --report json --output report.json
+dqm --table TableA --data data/TableA.csv --report markdown --output report.md
 ```
 
 输出示例：
 
 ```
-Table: sample_orders
+Table: TableA
 ------------------------------------------------------------
 [PASS] order_id :: not_null  (null_count=0, total_count=3, null_ratio=0.0)
 [PASS] order_id :: unique  (duplicate_count=0, total_count=3, duplicate_ratio=0.0)
