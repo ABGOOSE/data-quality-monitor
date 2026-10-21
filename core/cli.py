@@ -92,7 +92,13 @@ def _default_report_path(table: str, fmt: str) -> Path:
 
     时间戳用 %Y%m%d_%H%M%S 保证文件名唯一（同一表同一秒跑两次才会撞名）。
     """
-    ext = "json" if fmt == "json" else "md"
+    # 显式分支，不允许未知格式静默兜底成 md（和 export_report 的 fail-fast 口径一致）
+    if fmt == "json":
+        ext = "json"
+    elif fmt == "markdown":
+        ext = "md"
+    else:
+        raise ValueError(f"Unknown report format '{fmt}'. Available: json, markdown")
     # astimezone() 加本地时区，满足 ruff DTZ005；strftime 只取年月日时分秒做文件名
     timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     return Path.cwd() / f"report_{table}_{timestamp}.{ext}"

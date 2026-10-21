@@ -123,3 +123,24 @@ def test_main_invalid_report_format_exits_two():
     with pytest.raises(SystemExit) as excinfo:
         main(["--table", "sample_orders", "--data", str(GOOD_CSV), "--report", "yaml"])
     assert excinfo.value.code == 2
+
+
+def test_default_report_path_unknown_format_raises():
+    """内部函数 _default_report_path 直接传非法格式：必须抛 ValueError，不能静默兜底成 md。
+
+    argparse choices 已在入口拦截，这里守的是"内部函数自身严谨"——
+    万一以后有人绕过 choices 直接调用，也不能生成错误后缀的文件。
+    """
+    from core.cli import _default_report_path
+
+    with pytest.raises(ValueError, match="Unknown report format"):
+        _default_report_path("sample_orders", "pdf")
+
+
+def test_default_report_path_known_formats_have_correct_ext(monkeypatch, tmp_path):
+    """合法格式：json 扩展名 .json，markdown 扩展名 .md（防分支改坏）。"""
+    from core.cli import _default_report_path
+
+    monkeypatch.chdir(tmp_path)
+    assert _default_report_path("t", "json").suffix == ".json"
+    assert _default_report_path("t", "markdown").suffix == ".md"
