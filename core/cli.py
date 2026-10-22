@@ -19,6 +19,9 @@ from core.config_loader import (
 from core.reporter import (
     export_report,  # 从 core/reporter.py 里导入 export_report，负责把结果导出成报告文件（--report 用）
 )
+from core.validator import (
+    validate_rules,  # 从 core/validator.py 导入配置校验，加载后先体检，把配置错误挡在入口
+)
 
 # 2 个常量：DEFAULT_CONFIG（配置文件在哪）、_META_KEYS（哪些键是元信息）
 # 默认配置文件路径：用 __file__ 动态定位，而不是写死相对路径。
@@ -153,6 +156,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ...                         # 第 3 步：存起来
     """
     rules = load_rules(args.config)
+
+    # 配置 schema 校验：加载后立刻体检，把"配置乱写"的问题挡在最前面。
+    # 一次性返回所有错误（而不是改一个报一个），全部走 stderr。
+    config_errors = validate_rules(rules)
+    if config_errors:
+        for error in config_errors:
+            print(f"Config error: {error}", file=sys.stderr)
+        return 2
+
     # 检验表名
     if args.table not in rules.get("tables", {}):  # 字典.get(键, 默认值)是字典的安全取值方法看【
         # 错误信息走 stderr（错误输出通道），检查报告走 stdout（标准输出通道）。
