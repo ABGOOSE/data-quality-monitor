@@ -6,13 +6,19 @@ requires-python = ">=3.10"
 dependencies = [
     "pandas>=2.0",
     "pyyaml>=6.0",
-    "sqlalchemy>=2.0",
+    # 限制在 2.0.x：达梦 dmSQLAlchemy 方言包（2.0.17）不兼容 SQLAlchemy 2.1+
+    "sqlalchemy>=2.0,<2.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "ruff>=0.4",
+]
+# 连接达梦数据库时额外安装：pip install -e ".[dm]"
+# 注意：dmSQLAlchemy 方言包需从达梦安装目录源码安装，详见《达梦连接操作文档.md》
+dm = [
+    "dmPython",
 ]
 
 [project.scripts]
