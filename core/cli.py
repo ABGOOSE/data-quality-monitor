@@ -10,11 +10,14 @@ import sys  # 是「访问 Python 解释器本身」的接口，你和解释器�
 from datetime import datetime  # 生成报告文件名的时间戳
 from pathlib import Path  # 路径处理
 
-import pandas as pd  # 读 CSV
+from sqlalchemy.exc import SQLAlchemyError  # 数据库错误的基类，用来统一捕获连接/读表失败
 
 from core.checker import run_checks  # 从 core/checker.py 里导入 run_checks 函数，负责执行检查逻辑
 from core.config_loader import (
     load_rules,  # 从 core/config_loader.py 里导入 load_rules 函数，负责加载规则配置
+)
+from core.data_loader import (
+    load_dataframe,  # 从 core/data_loader.py 导入统一数据加载，CSV 或数据库都读成 DataFrame
 )
 from core.reporter import (
     export_report,  # 从 core/reporter.py 里导入 export_report，负责把结果导出成报告文件（--report 用）
@@ -53,7 +56,16 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
     )
     # 每个 add_argument 声明一个命令行参数；required=True 表示不传就直接报错退出
     parser.add_argument("--table", required=True, help="Table name defined in rules.yaml")
-    parser.add_argument("--data", required=True, help="Path to the CSV data file")
+    # 数据源二选一：--data 走 CSV、--db 走数据库。
+    # add_mutually_exclusive_group(required=True) 保证：两个都不传、或两个都传，
+    # argparse 都会报错（退出码 2）。这样不用自己写"必传一个且不能都传"的判断。
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--data", help="Path to the CSV data file")
+    source_group.add_argument(
+        "--db",
+        help="Database connection URL, e.g. sqlite:///data/demo.db or "
+        "mysql+pymysql://user:pass@host:3306/db",
+    )
     parser.add_argument(
         "--config",
         type=Path,
@@ -172,12 +184,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: table '{args.table}' not found in {args.config}", file=sys.stderr)
         return 2
 
+    # 读数据：CSV 或数据库都由 data_loader 统一读成 DataFrame。
+    # 不传 --data 时 args.data 是 None，data_loader 看到 --db 就走数据库。
     try:
-        df = pd.read_csv(args.data)
+        df = load_dataframe(
+            csv_path=args.data,
+            db_url=args.db,
+            table_name=args.table,
+        )
     except FileNotFoundError:
-        # 捕获文件不存在的异常，打印一行人能看懂的错误，
-        # 而不是让用户面对一整屏 traceback
+        # CSV 文件不存在：给人能看懂的错误，而不是一整屏 traceback。
         print(f"Error: data file not found: {args.data}", file=sys.stderr)
+        return 2
+    except SQLAlchemyError as exc:
+        # 数据库连接失败、表不存在等：统一转成清晰错误（退出码 2），
+        # 而不是让用户面对一整屏 SQLAlchemy traceback。
+        print(
+            f"Error: failed to read table '{args.table}' from database: {exc}",
+            file=sys.stderr,
+        )
         return 2
 
     results = run_checks(df, rules["tables"][args.table])
