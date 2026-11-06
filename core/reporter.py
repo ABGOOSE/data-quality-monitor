@@ -142,3 +142,79 @@ def export_report(
     if fmt == "markdown":
         return export_markdown(results, output_path, table_name, generated_at=generated_at)
     raise ValueError(f"Unknown report format '{fmt}'. Available: json, markdown")
+
+
+def export_report_multi(
+    per_table: list[tuple[str, list[dict]]],
+    fmt: str,
+    output_path: Path,
+    generated_at: str | None = None,
+) -> Path:
+    """多表报告：一个文件里按表分组（一次检查多张表时用）。
+
+    Args:
+        per_table: [(表名, 该表检查结果列表), ...]，顺序即输出顺序。
+        fmt: "json" or "markdown"。
+        output_path: 报告写入路径。
+        generated_at: ISO 时间戳；测试可注入固定值。
+
+    Returns:
+        输出路径。
+
+    Raises:
+        ValueError: fmt 不支持（fail-fast）。
+    """
+    if generated_at is None:
+        generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    if fmt == "json":
+        # 每张表一个对象，外层再给一个 totals 汇总所有表的合计
+        tables = [
+            {"table": table, **_summary(results), "results": results}
+            for table, results in per_table
+        ]
+        payload = {
+            "generated_at": generated_at,
+            "tables": tables,
+            "totals": {
+                "tables": len(per_table),
+                "total_checks": sum(len(rs) for _, rs in per_table),
+                "passed_checks": sum(1 for _, rs in per_table for r in rs if r["passed"]),
+                "failed_checks": sum(1 for _, rs in per_table for r in rs if not r["passed"]),
+            },
+        }
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return output_path
+
+    if fmt == "markdown":
+        total = sum(len(rs) for _, rs in per_table)
+        passed = sum(1 for _, rs in per_table for r in rs if r["passed"])
+        lines = [
+            "# Data Quality Report (Multi-table)",
+            "",
+            f"- 生成时间：{generated_at}",
+            f"- 表数量：{len(per_table)}",
+            f"- 总检查数：{total}",
+            f"- 通过：{passed}",
+            f"- 失败：{total - passed}",
+            "",
+        ]
+        for table, results in per_table:
+            summary = _summary(results)
+            lines.append(f"## {table}")
+            lines.append("")
+            lines.append(f"- 通过 {summary['passed_checks']} / {summary['total_checks']}")
+            lines.append("")
+            lines.append("| 状态 | 目标 | 规则 | 详情 |")
+            lines.append("|---|---|---|---|")
+            for result in results:
+                status = "PASS" if result["passed"] else "FAIL"
+                lines.append(
+                    f"| {status} | {_target_name(result)} | {result['rule']} "
+                    f"| {_format_detail(result)} |"
+                )
+            lines.append("")
+        output_path.write_text("\n".join(lines), encoding="utf-8")
+        return output_path
+
+    raise ValueError(f"Unknown report format '{fmt}'. Available: json, markdown")

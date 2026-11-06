@@ -11,6 +11,7 @@ from core.cli import main
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GOOD_CSV = PROJECT_ROOT / "data" / "TableA.csv"
 BAD_CSV = PROJECT_ROOT / "data" / "TableA_bad.csv"
+TABLEB_CSV = PROJECT_ROOT / "data" / "TableB.csv"  # 含一个 zscore 离群点(620)，单独跑退出码 1
 
 
 def test_main_all_pass_returns_zero(capsys):
@@ -144,3 +145,77 @@ def test_default_report_path_known_formats_have_correct_ext(monkeypatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     assert _default_report_path("t", "json").suffix == ".json"
     assert _default_report_path("t", "markdown").suffix == ".md"
+
+
+# ==================== 多表批量 ====================
+
+
+def test_main_multi_tables_one_fails_returns_one(capsys):
+    """多表：TableA 过、TableB 有离群点 → 整体退出码 1（聚合任一失败）。"""
+    code = main(["--table", "TableA", "TableB", "--data", str(GOOD_CSV), str(TABLEB_CSV)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "Table: TableA" in out
+    assert "Table: TableB" in out
+
+
+def test_main_multi_tables_all_pass_returns_zero(capsys):
+    """多表：两张都过 → 0。
+
+    这里用 TableA.csv 喂两次（同一规则跑两遍），纯粹验证"循环聚合、全过才 0"。
+    """
+    code = main(["--table", "TableA", "TableA", "--data", str(GOOD_CSV), str(GOOD_CSV)])
+    assert code == 0
+
+
+def test_main_multi_tables_data_count_mismatch_returns_two(capsys):
+    """多表：表数 2、文件数 1 → 无法一一对应，退出 2。"""
+    code = main(["--table", "TableA", "TableB", "--data", str(GOOD_CSV)])
+    assert code == 2
+    assert "expects 2 file(s)" in capsys.readouterr().err
+
+
+def test_main_multi_tables_unknown_name_returns_two(capsys):
+    """多表：其中一张表名拼错 → 退出 2，错误信息点名拼错的表。"""
+    code = main(["--table", "TableA", "NoSuch", "--data", str(GOOD_CSV), str(TABLEB_CSV)])
+    assert code == 2
+    assert "NoSuch" in capsys.readouterr().err
+
+
+def test_main_all_flag_checks_all_tables(capsys):
+    """--all：遍历配置里所有表（TableA 过、TableB 坏）→ 退出 1。"""
+    code = main(["--all", "--data", str(GOOD_CSV), str(TABLEB_CSV)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "Table: TableA" in out
+    assert "Table: TableB" in out
+
+
+def test_main_table_and_all_mutually_exclusive():
+    """--table 和 --all 同时给：argparse 互斥组直接拒绝（SystemExit 2）。"""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--table", "TableA", "--all", "--data", str(GOOD_CSV)])
+    assert excinfo.value.code == 2
+
+
+def test_main_multi_table_report_json_groups_by_table(tmp_path):
+    """多表 --report json：一个文件里 tables 数组按表分组，并带 totals 汇总。"""
+    out = tmp_path / "multi.json"
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "TableB",
+            "--data",
+            str(GOOD_CSV),
+            str(TABLEB_CSV),
+            "--report",
+            "json",
+            "--output",
+            str(out),
+        ]
+    )
+    assert code == 1  # TableB 有离群点，但报告照样生成
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert [t["table"] for t in data["tables"]] == ["TableA", "TableB"]
+    assert data["totals"]["tables"] == 2

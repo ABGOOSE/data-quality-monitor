@@ -20,7 +20,8 @@ from core.data_loader import (
     load_dataframe,  # 从 core/data_loader.py 导入统一数据加载，CSV 或数据库都读成 DataFrame
 )
 from core.reporter import (
-    export_report,  # 从 core/reporter.py 里导入 export_report，负责把结果导出成报告文件（--report 用）
+    export_report,  # 单表报告导出（--report 用）
+    export_report_multi,  # 多表分组报告导出（一次查多张表时用）
 )
 from core.validator import (
     validate_rules,  # 从 core/validator.py 导入配置校验，加载后先体检，把配置错误挡在入口
@@ -54,13 +55,29 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
             description="Run data quality checks defined in rules.yaml against a CSV file.",
         )
     )
-    # 每个 add_argument 声明一个命令行参数；required=True 表示不传就直接报错退出
-    parser.add_argument("--table", required=True, help="Table name defined in rules.yaml")
+    # 表选择：两种方式二选一（互斥组）。
+    #   --table TableA TableB   指定一张或多张表（nargs="+" 把多个值收集成列表）
+    #   --all                   检查 rules.yaml 里配置的所有表
+    # required=True：两个都不传时 argparse 直接报错退出（退出码 2）。
+    table_group = parser.add_mutually_exclusive_group(required=True)
+    table_group.add_argument(
+        "--table",
+        nargs="+",  # 接收一个或多个值，args.table 是 list[str]
+        help="One or more table names defined in rules.yaml",
+    )
+    table_group.add_argument(
+        "--all",
+        action="store_true",  # 出现这个开关就为 True，不接值
+        help="Check all tables defined in rules.yaml",
+    )
     # 数据源二选一：--data 走 CSV、--db 走数据库。
-    # add_mutually_exclusive_group(required=True) 保证：两个都不传、或两个都传，
-    # argparse 都会报错（退出码 2）。这样不用自己写"必传一个且不能都传"的判断。
+    # --data 也用 nargs="+"：多表时传多个文件，顺序和 --table 一一对应。
     source_group = parser.add_mutually_exclusive_group(required=True)
-    source_group.add_argument("--data", help="Path to the CSV data file")
+    source_group.add_argument(
+        "--data",
+        nargs="+",
+        help="CSV file paths, one per table; order must match --table",
+    )
     source_group.add_argument(
         "--db",
         help="Database connection URL, e.g. sqlite:///data/demo.db or "
@@ -147,7 +164,31 @@ def render_results(table: str, results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-# ============ 固定骨架：总指挥五段式（基本不用改） ============
+def _run_one_table(
+    table: str,
+    csv_path: str | None,
+    args: argparse.Namespace,
+    rules: dict,
+) -> tuple[list[dict], str | None]:
+    """读一张表的数据并跑检查，供 main 循环调用。
+
+    把"读数据 + 跑检查"这两步封装起来，main 只管循环和聚合，不用关心每张表怎么读。
+
+    Returns:
+        (results, None)：成功，results 是这张表的检查结果列表。
+        ([], 错误信息)：读数据失败（文件找不到 / 数据库连接失败），main 据此 return 2。
+    """
+    try:
+        df = load_dataframe(csv_path=csv_path, db_url=args.db, table_name=table)
+    except FileNotFoundError:
+        return [], f"data file not found: {csv_path}"
+    except SQLAlchemyError as exc:
+        return [], f"failed to read table '{table}' from database: {exc}"
+    results = run_checks(df, rules["tables"][table])
+    return results, None
+
+
+# ============ 固定骨架：总指挥（解析→加载→校验→循环执行→收尾） ============
 def main(argv: list[str] | None = None) -> int:
     # 函数③ main()：总指挥，五段式（解析→加载→校验→执行→收尾）
     """Run the CLI and return the process exit code.
@@ -170,53 +211,70 @@ def main(argv: list[str] | None = None) -> int:
     rules = load_rules(args.config)
 
     # 配置 schema 校验：加载后立刻体检，把"配置乱写"的问题挡在最前面。
-    # 一次性返回所有错误（而不是改一个报一个），全部走 stderr。
     config_errors = validate_rules(rules)
     if config_errors:
         for error in config_errors:
             print(f"Config error: {error}", file=sys.stderr)
         return 2
 
-    # 检验表名
-    if args.table not in rules.get("tables", {}):  # 字典.get(键, 默认值)是字典的安全取值方法看【
-        # 错误信息走 stderr（错误输出通道），检查报告走 stdout（标准输出通道）。
-        # 两个通道分开，脚本和 CI 才能把"正常输出"和"报错"分别捕获。
-        print(f"Error: table '{args.table}' not found in {args.config}", file=sys.stderr)
+    available_tables = rules.get("tables", {})
+    # 确定要检查哪些表：--all 取配置里全部表名，否则用 --table 给的列表
+    if args.all:
+        target_tables = list(available_tables.keys())
+    else:
+        target_tables = list(args.table)  # nargs="+" 已经是 list
+
+    if not target_tables:
+        print("Error: no table to check (config defines no tables)", file=sys.stderr)
         return 2
 
-    # 读数据：CSV 或数据库都由 data_loader 统一读成 DataFrame。
-    # 不传 --data 时 args.data 是 None，data_loader 看到 --db 就走数据库。
-    try:
-        df = load_dataframe(
-            csv_path=args.data,
-            db_url=args.db,
-            table_name=args.table,
-        )
-    except FileNotFoundError:
-        # CSV 文件不存在：给人能看懂的错误，而不是一整屏 traceback。
-        print(f"Error: data file not found: {args.data}", file=sys.stderr)
-        return 2
-    except SQLAlchemyError as exc:
-        # 数据库连接失败、表不存在等：统一转成清晰错误（退出码 2），
-        # 而不是让用户面对一整屏 SQLAlchemy traceback。
+    # 校验所有表名都在配置里（一次性列出所有拼错的表名）
+    unknown = [t for t in target_tables if t not in available_tables]
+    if unknown:
         print(
-            f"Error: failed to read table '{args.table}' from database: {exc}",
+            f"Error: table(s) not found in {args.config}: {', '.join(unknown)}",
             file=sys.stderr,
         )
         return 2
 
-    results = run_checks(df, rules["tables"][args.table])
-    print(render_results(args.table, results))
-    # ---- 结果导出（可选）：--report 指定格式，--output 指定路径 ----
-    # 放在打印之后：终端报告照常显示，导出是额外的留档动作。
-    # 注意：导出不影响退出码——有检查失败仍然返回 1，CI 判断不变。
+    # CSV 模式：文件数必须和表数一致，否则不知道哪个文件对应哪张表
+    if args.data:
+        if len(args.data) != len(target_tables):
+            print(
+                f"Error: --data expects {len(target_tables)} file(s) for "
+                f"{len(target_tables)} table(s), but got {len(args.data)}",
+                file=sys.stderr,
+            )
+            return 2
+        csv_paths = list(args.data)
+    else:
+        csv_paths = [None] * len(target_tables)  # 数据库模式：每张表都按表名读
+
+    # 逐表处理：读数据 → 跑检查 → 打印。任一表有 FAIL 就把退出码标成 1。
+    per_table: list[tuple[str, list[dict]]] = []
+    exit_code = 0
+    for table, csv_path in zip(target_tables, csv_paths):
+        results, error = _run_one_table(table, csv_path, args, rules)
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2  # 读数据失败：fail-fast，立即停止
+        print(render_results(table, results))
+        per_table.append((table, results))
+        if not all(result["passed"] for result in results):
+            exit_code = 1
+
+    # ---- 结果导出（可选）：单表走旧函数，多表走按表分组的新函数 ----
     if args.report:
-        output = args.output or _default_report_path(args.table, args.report)
-        export_report(results, args.report, output, args.table)
+        if len(per_table) == 1:
+            table, results = per_table[0]
+            output = args.output or _default_report_path(table, args.report)
+            export_report(results, args.report, output, table)
+        else:
+            output = args.output or _default_report_path("multi", args.report)
+            export_report_multi(per_table, args.report, output)
         print(f"Report written to {output}")
-    # all() + 生成器表达式：所有结果都 passed 才返回 True。
-    # main 返回的数字会被 sys.exit 转成进程退出码——退出码就是 CLI 和 CI 之间的"协议"
-    return 0 if all(result["passed"] for result in results) else 1
+
+    return exit_code
 
 
 if __name__ == "__main__":
