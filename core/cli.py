@@ -76,13 +76,19 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
         type=Path,  # argparse 自动转成 Path 对象
         help="Path to a file listing target tables, one per line (# for comments, blank lines ignored)",
     )
-    # 数据源二选一：--data 走 CSV、--db 走数据库。
-    # --data 也用 nargs="+"：多表时传多个文件，顺序和 --table 一一对应。
+    # 数据源三选一：--data 直接给 CSV、--data-file 从文件读 CSV 清单、--db 走数据库。
+    # --data 用 nargs="+"：多表时传多个文件，顺序和 --table 一一对应。
+    # --data-file 和 --tables-file 对称：文件里每行一个 CSV 路径，#注释、空行忽略，文件多时用。
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
         "--data",
         nargs="+",
         help="CSV file paths, one per table; order must match --table",
+    )
+    source_group.add_argument(
+        "--data-file",
+        type=Path,  # argparse 自动转成 Path 对象
+        help="Path to a file listing CSV paths, one per line (# for comments, blank lines ignored)",
     )
     source_group.add_argument(
         "--db",
@@ -184,26 +190,28 @@ def render_results(table: str, results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _read_tables_file(path: Path) -> list[str]:
-    """从文件读目标表清单：每行一个表名，忽略空行和 # 开头的注释行。
+def _read_list_file(path: Path) -> list[str]:
+    """从文件读清单：每行一个条目，忽略空行和 # 开头的注释行。
 
-    表多时命令行太长，放文件里更好维护、可进 git。
+    通用工具：--tables-file 用它读表名、--data-file 用它读 CSV 路径，逻辑完全一样。
+    条目多时命令行太长，放文件里更好维护、可进 git。
     文件不存在由调用方（main）捕获 FileNotFoundError 并报退出码 2。
     """
-    tables = []
+    items = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):  # 空行、注释行跳过
             continue
-        tables.append(line)
-    return tables
+        items.append(line)
+    return items
 
 
 def _build_dry_run_report(
     requested: list[str],
     valid: list[str],
     missing: list[str],
-    args: argparse.Namespace,
+    db_url: str | None,
+    csv_files: list[str] | None,
 ) -> str:
     """生成预检（dry-run）文本：只展示范围，不执行任何检查。
 
@@ -228,10 +236,10 @@ def _build_dry_run_report(
         lines.append("  (none)")
     lines.append("")
     # 数据源说明：数据库连接串，或 CSV 文件个数
-    if args.db:
-        lines.append(f"Data source: database ({args.db})")
+    if db_url:
+        lines.append(f"Data source: database ({db_url})")
     else:
-        lines.append(f"Data source: {len(args.data)} CSV file(s)")
+        lines.append(f"Data source: {len(csv_files)} CSV file(s)")
     return "\n".join(lines)
 
 
@@ -325,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         requested_tables = list(available_tables.keys())
     elif args.tables_file is not None:
         try:
-            requested_tables = _read_tables_file(args.tables_file)
+            requested_tables = _read_list_file(args.tables_file)
         except FileNotFoundError:
             print(f"Error: tables file not found: {args.tables_file}", file=sys.stderr)
             return 2
@@ -340,9 +348,28 @@ def main(argv: list[str] | None = None) -> int:
     valid_tables = [t for t in requested_tables if t in available_tables]
     missing_tables = list(dict.fromkeys(t for t in requested_tables if t not in available_tables))
 
+    # 统一解析 CSV 数据源（三种来源归一为 csv_files，数据库模式为 None）：
+    #   --db        → None（按表名读库）
+    #   --data-file → 从文件读 CSV 路径清单
+    #   --data      → 直接用命令行给的路径
+    if args.db:
+        csv_files = None
+    elif args.data_file is not None:
+        try:
+            csv_files = _read_list_file(args.data_file)
+        except FileNotFoundError:
+            print(f"Error: data file list not found: {args.data_file}", file=sys.stderr)
+            return 2
+    else:
+        csv_files = list(args.data)  # nargs="+" 已经是 list
+
     # ① 预检：只打印范围清单，不读数据、不检查、不导出
     if args.dry_run:
-        print(_build_dry_run_report(requested_tables, valid_tables, missing_tables, args))
+        print(
+            _build_dry_run_report(
+                requested_tables, valid_tables, missing_tables, args.db, csv_files
+            )
+        )
         return 1 if missing_tables else 0
 
     # ② 处理无规则表：宽松模式跳过，严格模式报错（默认严格）
@@ -390,18 +417,18 @@ def main(argv: list[str] | None = None) -> int:
     else:
         target_tables = valid_tables  # 全部有效
 
-    # ③ 准备每张表的数据来源
-    if args.data:
+    # ③ 准备每张表的数据来源（csv_files 已统一，无论来自 --data 还是 --data-file）
+    if csv_files is not None:
         # 文件数按"原始请求表数"校验；再用"表→文件"映射，只取实际要查的表的文件
         # （这样跳过某表时，它对应的文件也一起排除，不会错位）
-        if len(args.data) != len(requested_tables):
+        if len(csv_files) != len(requested_tables):
             print(
-                f"Error: --data expects {len(requested_tables)} file(s) for "
-                f"{len(requested_tables)} table(s), but got {len(args.data)}",
+                f"Error: CSV data expects {len(requested_tables)} file(s) for "
+                f"{len(requested_tables)} table(s), but got {len(csv_files)}",
                 file=sys.stderr,
             )
             return 2
-        file_map = dict(zip(requested_tables, args.data))
+        file_map = dict(zip(requested_tables, csv_files))
         csv_paths = [file_map[t] for t in target_tables]
     else:
         csv_paths = [None] * len(target_tables)  # 数据库模式：每张表都按表名读

@@ -472,3 +472,55 @@ def test_main_dry_run_does_not_write_missing_report(tmp_path, monkeypatch):
     )
     assert code == 1
     assert list(tmp_path.glob("missing_tables_*.txt")) == []
+
+
+# ==================== --data-file：从文件读 CSV 路径清单 ====================
+
+
+def test_main_data_file_reads_csv_list(tmp_path, capsys):
+    """--data-file：从文件读 CSV 路径，忽略注释行和空行，正常检查退出 0。"""
+    df_file = tmp_path / "data_list.txt"
+    df_file.write_text(f"# CSV 清单\n\n{GOOD_CSV}\n", encoding="utf-8")
+    code = main(["--table", "TableA", "--data-file", str(df_file)])
+    assert code == 0
+    assert "[PASS]" in capsys.readouterr().out
+
+
+def test_main_data_file_multiple_paths(tmp_path, capsys):
+    """--data-file 多表：每行一个路径，顺序和表一一对应（TableB 离群 → 退出 1）。"""
+    df_file = tmp_path / "data_list.txt"
+    df_file.write_text(f"{GOOD_CSV}\n{TABLEB_CSV}\n", encoding="utf-8")
+    code = main(["--table", "TableA", "TableB", "--data-file", str(df_file)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "Table: TableA" in out
+    assert "Table: TableB" in out
+
+
+def test_main_data_file_not_found_returns_two(tmp_path, capsys):
+    """--data-file 文件本身不存在：退出 2，错误信息走 stderr。"""
+    code = main(["--table", "TableA", "--data-file", str(tmp_path / "nope.txt")])
+    assert code == 2
+    assert "not found" in capsys.readouterr().err
+
+
+def test_main_data_file_count_mismatch_returns_two(tmp_path, capsys):
+    """--data-file 里路径数和表数对不上：退出 2。"""
+    df_file = tmp_path / "data_list.txt"
+    df_file.write_text(f"{GOOD_CSV}\n", encoding="utf-8")  # 只有 1 个路径，表有 2 张
+    code = main(["--table", "TableA", "TableB", "--data-file", str(df_file)])
+    assert code == 2
+    assert "expects 2 file(s)" in capsys.readouterr().err
+
+
+def test_main_tables_file_and_data_file_together(tmp_path, capsys):
+    """--tables-file 和 --data-file 同时用：表名、CSV 路径都从文件读（全文件驱动）。"""
+    tf = tmp_path / "tables.txt"
+    tf.write_text("TableA\nTableB\n", encoding="utf-8")
+    df_file = tmp_path / "data_list.txt"
+    df_file.write_text(f"{GOOD_CSV}\n{TABLEB_CSV}\n", encoding="utf-8")
+    code = main(["--tables-file", str(tf), "--data-file", str(df_file)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "Table: TableA" in out
+    assert "Table: TableB" in out
