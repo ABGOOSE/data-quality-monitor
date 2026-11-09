@@ -280,3 +280,114 @@ def test_main_missing_tables_report_is_structured_and_deduped(tmp_path, capsys):
     assert err.count("[missing] NoSuch") == 1
     # 提示 rules 里实际有哪些表
     assert "Tables defined in rules.yaml" in err
+
+
+# ==================== --dry-run：预检（只报告，不执行） ====================
+
+
+def test_main_dry_run_all_valid_returns_zero(capsys):
+    """预检全有效：返回 0，列出 [ok] 表，但不跑检查（没有 [PASS] 结果行）。"""
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV), "--dry-run"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "[DRY-RUN]" in out
+    assert "[ok] TableA" in out
+    assert "[PASS]" not in out  # 预检不执行检查
+
+
+def test_main_dry_run_missing_returns_one(capsys):
+    """预检发现无规则表：返回 1，并在清单里点名 [missing]。"""
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "NoSuch",
+            "--data",
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+            "--dry-run",
+        ]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "[ok] TableA" in out
+    assert "[missing] NoSuch" in out
+
+
+def test_main_dry_run_has_no_file_side_effect(tmp_path):
+    """预检即使带了 --report/--output，也不写任何文件（在导出前就返回）。"""
+    out = tmp_path / "should_not_exist.json"
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "--data",
+            str(GOOD_CSV),
+            "--dry-run",
+            "--report",
+            "json",
+            "--output",
+            str(out),
+        ]
+    )
+    assert code == 0
+    assert not out.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+# ==================== --skip-missing：宽松模式（跳过无规则表） ====================
+
+
+def test_main_skip_missing_continues_with_valid_table(capsys):
+    """宽松模式：跳过 NoSuch，继续查 TableA；警告走 stderr，结果全 PASS，退出码 0。"""
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "NoSuch",
+            "--data",
+            str(GOOD_CSV),
+            str(BAD_CSV),
+            "--skip-missing",
+        ]
+    )
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "[skip] NoSuch" in captured.err
+    assert "Table: TableA" in captured.out
+    assert "[PASS]" in captured.out
+
+
+def test_main_skip_missing_uses_correct_file_mapping(capsys):
+    """宽松模式文件不错位：TableA 用它对应的第一个文件（GOOD_CSV 全过），
+    NoSuch 对应的第二个文件被一起排除。"""
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "NoSuch",
+            "--data",
+            str(GOOD_CSV),  # 对应 TableA
+            str(BAD_CSV),  # 对应 NoSuch（应被排除，不影响结果）
+            "--skip-missing",
+        ]
+    )
+    assert code == 0  # 若错用了 BAD_CSV，这里会变成 1
+    assert "[FAIL]" not in capsys.readouterr().out
+
+
+def test_main_skip_missing_all_skipped_returns_two(capsys):
+    """宽松模式下所有表都无规则：一张有效表都不剩，退出 2。"""
+    code = main(
+        [
+            "--table",
+            "NoSuch",
+            "AnotherNo",
+            "--data",
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+            "--skip-missing",
+        ]
+    )
+    assert code == 2
+    assert "no valid table left" in capsys.readouterr().err

@@ -110,6 +110,20 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
         type=Path,
         help="Report output path (used with --report; default: report_<table>_<timestamp>.json/md)",
     )
+    # --dry-run：预检（preflight），只列出哪些表有规则、哪些没有，
+    # 不读数据、不跑检查、不导出，用于正式跑之前确认范围，避免漏表/误判。
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preflight: only show which tables have rules; do not run checks",
+    )
+    # --skip-missing：宽松模式（lenient），无规则的表跳过并警告，继续查有规则的表；
+    # 不传时默认严格（strict）：有无规则表就报错 return 2。
+    parser.add_argument(
+        "--skip-missing",
+        action="store_true",
+        help="Lenient mode: skip tables without rules (warn instead of failing)",
+    )
     return parser
 
 
@@ -185,6 +199,42 @@ def _read_tables_file(path: Path) -> list[str]:
     return tables
 
 
+def _build_dry_run_report(
+    requested: list[str],
+    valid: list[str],
+    missing: list[str],
+    args: argparse.Namespace,
+) -> str:
+    """生成预检（dry-run）文本：只展示范围，不执行任何检查。
+
+    分三块：请求了哪些表、哪些有规则（会查）、哪些没规则（需处理），最后说明数据源。
+    """
+    lines = [
+        "[DRY-RUN] Preflight check — no data is read and no checks are executed.",
+        "-" * 60,
+        f"Requested tables: {len(requested)}",
+        "",
+        f"Tables WITH rules ({len(valid)}):",
+    ]
+    if valid:
+        lines.extend(f"  [ok] {t}" for t in valid)
+    else:
+        lines.append("  (none)")
+    lines.append("")
+    lines.append(f"Tables WITHOUT rules ({len(missing)}):")
+    if missing:
+        lines.extend(f"  [missing] {t}" for t in missing)
+    else:
+        lines.append("  (none)")
+    lines.append("")
+    # 数据源说明：数据库连接串，或 CSV 文件个数
+    if args.db:
+        lines.append(f"Data source: database ({args.db})")
+    else:
+        lines.append(f"Data source: {len(args.data)} CSV file(s)")
+    return "\n".join(lines)
+
+
 def _run_one_table(
     table: str,
     csv_path: str | None,
@@ -239,49 +289,74 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     available_tables = rules.get("tables", {})
-    # 确定要检查哪些表：三种方式三选一
+    # 确定"原始请求"的表名单：三种方式三选一
     if args.all:
-        target_tables = list(available_tables.keys())
+        requested_tables = list(available_tables.keys())
     elif args.tables_file is not None:
         try:
-            target_tables = _read_tables_file(args.tables_file)
+            requested_tables = _read_tables_file(args.tables_file)
         except FileNotFoundError:
             print(f"Error: tables file not found: {args.tables_file}", file=sys.stderr)
             return 2
     else:
-        target_tables = list(args.table)  # nargs="+" 已经是 list
+        requested_tables = list(args.table)  # nargs="+" 已经是 list
 
-    if not target_tables:
+    if not requested_tables:
         print("Error: no table to check (config defines no tables)", file=sys.stderr)
         return 2
 
-    # 校验所有表名都在配置里：把"无规则表"逐行列出，并提示 rules 里实际有哪些表，
-    # 方便对照纠正拼写。dict.fromkeys 去重但保留首次出现的顺序（文件里可能写重复）。
-    unknown = [t for t in target_tables if t not in available_tables]
-    if unknown:
-        missing = list(dict.fromkeys(unknown))
-        print(
-            f"Error: {len(missing)} table(s) have no rules in {args.config}:",
-            file=sys.stderr,
-        )
-        for t in missing:
-            print(f"  [missing] {t}", file=sys.stderr)
-        print(
-            f"Tables defined in rules.yaml: {', '.join(available_tables)}",
-            file=sys.stderr,
-        )
-        return 2
+    # 分成有规则（valid）和无规则（missing）两组；missing 去重保序。
+    valid_tables = [t for t in requested_tables if t in available_tables]
+    missing_tables = list(dict.fromkeys(t for t in requested_tables if t not in available_tables))
 
-    # CSV 模式：文件数必须和表数一致，否则不知道哪个文件对应哪张表
-    if args.data:
-        if len(args.data) != len(target_tables):
+    # ① 预检：只打印范围清单，不读数据、不检查、不导出
+    if args.dry_run:
+        print(_build_dry_run_report(requested_tables, valid_tables, missing_tables, args))
+        return 1 if missing_tables else 0
+
+    # ② 处理无规则表：宽松模式跳过，严格模式报错（默认严格）
+    if missing_tables:
+        if args.skip_missing:
             print(
-                f"Error: --data expects {len(target_tables)} file(s) for "
-                f"{len(target_tables)} table(s), but got {len(args.data)}",
+                f"Warning: skipping {len(missing_tables)} table(s) without rules:",
+                file=sys.stderr,
+            )
+            for t in missing_tables:
+                print(f"  [skip] {t}", file=sys.stderr)
+            if not valid_tables:
+                # 跳完一张有效表都不剩，没法继续
+                print("Error: no valid table left to check after skipping", file=sys.stderr)
+                return 2
+            target_tables = valid_tables
+        else:
+            # 严格模式：结构化列出缺失表并提示可用表，终止
+            print(
+                f"Error: {len(missing_tables)} table(s) have no rules in {args.config}:",
+                file=sys.stderr,
+            )
+            for t in missing_tables:
+                print(f"  [missing] {t}", file=sys.stderr)
+            print(
+                f"Tables defined in rules.yaml: {', '.join(available_tables)}",
                 file=sys.stderr,
             )
             return 2
-        csv_paths = list(args.data)
+    else:
+        target_tables = valid_tables  # 全部有效
+
+    # ③ 准备每张表的数据来源
+    if args.data:
+        # 文件数按"原始请求表数"校验；再用"表→文件"映射，只取实际要查的表的文件
+        # （这样跳过某表时，它对应的文件也一起排除，不会错位）
+        if len(args.data) != len(requested_tables):
+            print(
+                f"Error: --data expects {len(requested_tables)} file(s) for "
+                f"{len(requested_tables)} table(s), but got {len(args.data)}",
+                file=sys.stderr,
+            )
+            return 2
+        file_map = dict(zip(requested_tables, args.data))
+        csv_paths = [file_map[t] for t in target_tables]
     else:
         csv_paths = [None] * len(target_tables)  # 数据库模式：每张表都按表名读
 
