@@ -255,11 +255,19 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: no table to check (config defines no tables)", file=sys.stderr)
         return 2
 
-    # 校验所有表名都在配置里（一次性列出所有拼错的表名）
+    # 校验所有表名都在配置里：把"无规则表"逐行列出，并提示 rules 里实际有哪些表，
+    # 方便对照纠正拼写。dict.fromkeys 去重但保留首次出现的顺序（文件里可能写重复）。
     unknown = [t for t in target_tables if t not in available_tables]
     if unknown:
+        missing = list(dict.fromkeys(unknown))
         print(
-            f"Error: table(s) not found in {args.config}: {', '.join(unknown)}",
+            f"Error: {len(missing)} table(s) have no rules in {args.config}:",
+            file=sys.stderr,
+        )
+        for t in missing:
+            print(f"  [missing] {t}", file=sys.stderr)
+        print(
+            f"Tables defined in rules.yaml: {', '.join(available_tables)}",
             file=sys.stderr,
         )
         return 2

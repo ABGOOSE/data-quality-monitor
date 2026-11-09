@@ -255,3 +255,28 @@ def test_main_tables_file_unknown_table_in_list_returns_two(tmp_path, capsys):
     code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV), str(TABLEB_CSV)])
     assert code == 2
     assert "NoSuch" in capsys.readouterr().err
+
+
+def test_main_missing_tables_report_is_structured_and_deduped(tmp_path, capsys):
+    """无规则表：结构化输出（[missing] 标记、去重、提示可用表）。"""
+    tf = tmp_path / "tables.txt"
+    # NoSuch 写两遍，验证去重；再加一个无规则表
+    tf.write_text("NoSuch\nNoSuch\nAnotherMissing\n", encoding="utf-8")
+    code = main(
+        [
+            "--tables-file",
+            str(tf),
+            "--data",
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+        ]
+    )
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "[missing] NoSuch" in err
+    assert "[missing] AnotherMissing" in err
+    # 去重：NoSuch 只出现一次（[missing] 行）
+    assert err.count("[missing] NoSuch") == 1
+    # 提示 rules 里实际有哪些表
+    assert "Tables defined in rules.yaml" in err
