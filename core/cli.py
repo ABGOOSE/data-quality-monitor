@@ -55,10 +55,11 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
             description="Run data quality checks defined in rules.yaml against a CSV file.",
         )
     )
-    # 表选择：两种方式二选一（互斥组）。
+    # 表选择：三种方式三选一（互斥组）。
     #   --table TableA TableB   指定一张或多张表（nargs="+" 把多个值收集成列表）
     #   --all                   检查 rules.yaml 里配置的所有表
-    # required=True：两个都不传时 argparse 直接报错退出（退出码 2）。
+    #   --tables-file t.txt     从文件读表名（每行一个，#注释、空行忽略），表多时用
+    # required=True：三个都不传时 argparse 直接报错退出（退出码 2）。
     table_group = parser.add_mutually_exclusive_group(required=True)
     table_group.add_argument(
         "--table",
@@ -69,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
         "--all",
         action="store_true",  # 出现这个开关就为 True，不接值
         help="Check all tables defined in rules.yaml",
+    )
+    table_group.add_argument(
+        "--tables-file",
+        type=Path,  # argparse 自动转成 Path 对象
+        help="Path to a file listing target tables, one per line (# for comments, blank lines ignored)",
     )
     # 数据源二选一：--data 走 CSV、--db 走数据库。
     # --data 也用 nargs="+"：多表时传多个文件，顺序和 --table 一一对应。
@@ -164,6 +170,21 @@ def render_results(table: str, results: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _read_tables_file(path: Path) -> list[str]:
+    """从文件读目标表清单：每行一个表名，忽略空行和 # 开头的注释行。
+
+    表多时命令行太长，放文件里更好维护、可进 git。
+    文件不存在由调用方（main）捕获 FileNotFoundError 并报退出码 2。
+    """
+    tables = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):  # 空行、注释行跳过
+            continue
+        tables.append(line)
+    return tables
+
+
 def _run_one_table(
     table: str,
     csv_path: str | None,
@@ -218,9 +239,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     available_tables = rules.get("tables", {})
-    # 确定要检查哪些表：--all 取配置里全部表名，否则用 --table 给的列表
+    # 确定要检查哪些表：三种方式三选一
     if args.all:
         target_tables = list(available_tables.keys())
+    elif args.tables_file is not None:
+        try:
+            target_tables = _read_tables_file(args.tables_file)
+        except FileNotFoundError:
+            print(f"Error: tables file not found: {args.tables_file}", file=sys.stderr)
+            return 2
     else:
         target_tables = list(args.table)  # nargs="+" 已经是 list
 

@@ -219,3 +219,39 @@ def test_main_multi_table_report_json_groups_by_table(tmp_path):
     data = json.loads(out.read_text(encoding="utf-8"))
     assert [t["table"] for t in data["tables"]] == ["TableA", "TableB"]
     assert data["totals"]["tables"] == 2
+
+
+# ==================== --tables-file：从文件读表清单 ====================
+
+
+def test_main_tables_file_reads_list_and_ignores_comments(tmp_path, capsys):
+    """--tables-file：读文件里的表名，忽略注释行和空行。
+
+    文件内容里 TableA 过、TableB 坏 → 整体退出 1。
+    """
+    tf = tmp_path / "tables.txt"
+    tf.write_text(
+        "# 我的表清单\n\nTableA\n\n# 下面是另一张\nTableB\n",
+        encoding="utf-8",
+    )
+    code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV), str(TABLEB_CSV)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "Table: TableA" in out
+    assert "Table: TableB" in out
+
+
+def test_main_tables_file_not_found_returns_two(tmp_path, capsys):
+    """--tables-file 文件不存在：退出 2，错误信息走 stderr。"""
+    code = main(["--tables-file", str(tmp_path / "nope.txt"), "--data", str(GOOD_CSV)])
+    assert code == 2
+    assert "not found" in capsys.readouterr().err
+
+
+def test_main_tables_file_unknown_table_in_list_returns_two(tmp_path, capsys):
+    """文件里写了不存在的表名：走统一的表名校验，退出 2。"""
+    tf = tmp_path / "tables.txt"
+    tf.write_text("TableA\nNoSuch\n", encoding="utf-8")
+    code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV), str(TABLEB_CSV)])
+    assert code == 2
+    assert "NoSuch" in capsys.readouterr().err
