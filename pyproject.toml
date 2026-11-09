@@ -38,8 +38,9 @@ include = ["core*", "config*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-# 个人学习日志（markdown 里的代码块）不参与代码规范检查
-exclude = ["notes"]
+# 个人学习日志（markdown 里的代码块）不参与代码规范检查；
+# 文档 md 里的示例代码也不纳入：ruff 是 Python 工具，避免文档代码块让 CI 误红
+exclude = ["notes", "*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
