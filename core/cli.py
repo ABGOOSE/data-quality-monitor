@@ -235,6 +235,37 @@ def _build_dry_run_report(
     return "\n".join(lines)
 
 
+def _write_missing_report(
+    missing: list[str],
+    available: list[str],
+    config_path: Path,
+    reason: str,
+) -> Path:
+    """把"无规则表"清单写成文件留存，返回文件路径。
+
+    终端输出会消失，文件用于事后审计/追责。
+    reason："strict"（严格模式，拒绝）或 "lenient"（宽松模式，跳过）。
+    """
+    now = datetime.now().astimezone()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    path = Path.cwd() / f"missing_tables_{timestamp}.txt"
+    lines = [
+        "Data Quality Monitor — Missing Tables Report",
+        "=" * 60,
+        f"Generated at: {now.isoformat()}",
+        f"Rules file:   {config_path}",
+        f"Reason:       {reason}",
+        "-" * 60,
+        f"Tables without rules ({len(missing)}):",
+    ]
+    lines.extend(f"  - {t}" for t in missing)
+    lines.append("-" * 60)
+    lines.append("Tables available in rules.yaml:")
+    lines.extend(f"  - {t}" for t in available)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 def _run_one_table(
     table: str,
     csv_path: str | None,
@@ -317,19 +348,33 @@ def main(argv: list[str] | None = None) -> int:
     # ② 处理无规则表：宽松模式跳过，严格模式报错（默认严格）
     if missing_tables:
         if args.skip_missing:
+            # 先把缺失表清单写成文件留存（即使下面全跳过也有记录）
+            missing_path = _write_missing_report(
+                missing_tables,
+                list(available_tables),
+                args.config,
+                "lenient mode — tables without rules are skipped",
+            )
             print(
                 f"Warning: skipping {len(missing_tables)} table(s) without rules:",
                 file=sys.stderr,
             )
             for t in missing_tables:
                 print(f"  [skip] {t}", file=sys.stderr)
+            print(f"Missing tables report written to {missing_path}", file=sys.stderr)
             if not valid_tables:
                 # 跳完一张有效表都不剩，没法继续
                 print("Error: no valid table left to check after skipping", file=sys.stderr)
                 return 2
             target_tables = valid_tables
         else:
-            # 严格模式：结构化列出缺失表并提示可用表，终止
+            # 严格模式：先写缺失表文件留存，再结构化列出并终止
+            missing_path = _write_missing_report(
+                missing_tables,
+                list(available_tables),
+                args.config,
+                "strict mode — tables without rules are rejected",
+            )
             print(
                 f"Error: {len(missing_tables)} table(s) have no rules in {args.config}:",
                 file=sys.stderr,
@@ -340,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"Tables defined in rules.yaml: {', '.join(available_tables)}",
                 file=sys.stderr,
             )
+            print(f"Missing tables report written to {missing_path}", file=sys.stderr)
             return 2
     else:
         target_tables = valid_tables  # 全部有效

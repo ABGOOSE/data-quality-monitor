@@ -391,3 +391,84 @@ def test_main_skip_missing_all_skipped_returns_two(capsys):
     )
     assert code == 2
     assert "no valid table left" in capsys.readouterr().err
+
+
+# ==================== 缺失表文件留存（审计留痕） ====================
+
+
+def test_main_strict_writes_missing_report_file(tmp_path, monkeypatch):
+    """严格模式：生成 missing_tables 文件，内容含缺失表和可用表，退出码 2。"""
+    monkeypatch.chdir(tmp_path)
+    code = main(["--table", "NoSuch", "AnotherMissing", "--data", str(GOOD_CSV), str(GOOD_CSV)])
+    assert code == 2
+    files = list(tmp_path.glob("missing_tables_*.txt"))
+    assert len(files) == 1
+    text = files[0].read_text(encoding="utf-8")
+    assert "- NoSuch" in text
+    assert "- AnotherMissing" in text
+    assert "strict mode" in text
+    assert "- TableA" in text  # 可用表也列出
+
+
+def test_main_lenient_writes_missing_report_and_continues(tmp_path, monkeypatch):
+    """宽松模式：生成缺失表文件，同时继续检查有效表，退出码 0。"""
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "NoSuch",
+            "--data",
+            str(GOOD_CSV),
+            str(BAD_CSV),
+            "--skip-missing",
+        ]
+    )
+    assert code == 0
+    files = list(tmp_path.glob("missing_tables_*.txt"))
+    assert len(files) == 1
+    assert "lenient mode" in files[0].read_text(encoding="utf-8")
+
+
+def test_main_all_skipped_still_writes_report(tmp_path, monkeypatch):
+    """全跳过（退出 2）也必须留文件，不能因为终止就没记录。"""
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "--table",
+            "NoSuch",
+            "AnotherNo",
+            "--data",
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+            "--skip-missing",
+        ]
+    )
+    assert code == 2
+    assert len(list(tmp_path.glob("missing_tables_*.txt"))) == 1
+
+
+def test_main_no_missing_writes_no_report(tmp_path, monkeypatch):
+    """全部表都有规则：不生成缺失表文件。"""
+    monkeypatch.chdir(tmp_path)
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV)])
+    assert code == 0
+    assert list(tmp_path.glob("missing_tables_*.txt")) == []
+
+
+def test_main_dry_run_does_not_write_missing_report(tmp_path, monkeypatch):
+    """dry-run 即使有缺失表也不写文件（保持无副作用）。"""
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "--table",
+            "TableA",
+            "NoSuch",
+            "--data",
+            str(GOOD_CSV),
+            str(GOOD_CSV),
+            "--dry-run",
+        ]
+    )
+    assert code == 1
+    assert list(tmp_path.glob("missing_tables_*.txt")) == []
