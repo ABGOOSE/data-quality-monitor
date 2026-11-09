@@ -1,0 +1,8 @@
+# CSV 数据文件清单：每行一个文件路径，顺序和 tables.txt 里的表一一对应
+# 以 # 开头的是注释行、空行会被自动忽略
+#
+# 重要：这里的路径是相对于"运行 dqm 命令时所在的目录"，不是相对于本文件。
+# 所以请在项目根目录 E:\github1\data-quality-monitor 下运行 dqm，
+# 下面的相对路径 data/... 才能正确找到文件。
+data/TableA.csv
+data/TableB.csv
