@@ -55,6 +55,14 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
             description="Run data quality checks defined in rules.yaml against a CSV file.",
         )
     )
+
+    # parser.add_argument("--table", nargs="+") 的意思是：
+    # “以后命令行里出现 --table a b c，就把它后面的值收集成 ['a','b','c']，存到 args.table 这个属性上；
+    # --help 里也自动带上这条说明；用户拼错成 --tabel 时自动报错。”
+    # parser.add_mutually_exclusive_group(...) 是什么
+    # add_argument 是往容器里加“参数”；add_mutually_exclusive_group 是往容器里加“一圈约束”，这圈约束里装的是若干个参数，
+    # 规则是“最多只能有一个出现”。
+
     # 表选择：三种方式三选一（互斥组）。
     #   --table TableA TableB   指定一张或多张表（nargs="+" 把多个值收集成列表）
     #   --all                   检查 rules.yaml 里配置的所有表

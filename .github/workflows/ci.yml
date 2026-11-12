@@ -36,7 +36,7 @@ jobs:
           ruff format --check .  # --check：只检查不改文件，格式不对就让 CI 变红
 
       - name: Test with pytest
-        run: pytest
+        run: pytest --cov --cov-report=term-missing  # 跑测试并统计覆盖率，pyproject 里 fail_under=90，不达标自动变红
 
       - name: Smoke test the CLI
         run: |

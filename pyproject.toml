@@ -13,6 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
 ]
 # 连接达梦数据库时额外安装：pip install -e ".[dm]"
@@ -45,3 +46,16 @@ exclude = ["notes", "*.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+# ============ 测试覆盖率（coverage.py）配置 ============
+[tool.coverage.run]
+source = ["core"]  # 只统计 core 包，不统计 tests 自身
+branch = true  # 开启分支覆盖：不只看每一行有没有执行，还看 if/else 的两条路是否都走到
+
+[tool.coverage.report]
+show_missing = true  # 报告里列出没覆盖到的具体行号
+fail_under = 90  # 门槛：总覆盖率低于 90% 时命令以非 0 退出，CI 据此变红
+exclude_lines = [
+    "pragma: no cover",  # 代码里标了 # pragma: no cover 的行不纳入统计
+    'if __name__ == .__main__.:',  # 正则：脚本入口块（import 时不执行），不计入覆盖率
+]

@@ -3,7 +3,9 @@
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
+from sqlalchemy import create_engine
 
 from core.cli import main
 
@@ -524,3 +526,92 @@ def test_main_tables_file_and_data_file_together(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Table: TableA" in out
     assert "Table: TableB" in out
+
+
+# ==================== main 内的配置校验入口 ====================
+
+
+def test_main_invalid_config_returns_two(tmp_path, capsys):
+    """配置能被 YAML 解析但 schema 不合法：main 打印 Config error 并 return 2。"""
+    bad_config = tmp_path / "bad.yaml"
+    bad_config.write_text("other: 1\n", encoding="utf-8")  # 缺少必需的 tables 键
+    code = main(["--table", "TableA", "--data", str(GOOD_CSV), "--config", str(bad_config)])
+    assert code == 2
+    assert "Config error" in capsys.readouterr().err
+
+
+# ==================== 空请求表 ====================
+
+
+def test_main_empty_tables_file_returns_two(tmp_path, capsys):
+    """tables-file 只有注释和空行：解析出 0 张表，return 2。"""
+    tf = tmp_path / "empty.txt"
+    tf.write_text("# 只有注释\n\n   \n", encoding="utf-8")
+    code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV)])
+    assert code == 2
+    assert "no table to check" in capsys.readouterr().err
+
+
+# ==================== dry-run 全部无规则 ====================
+
+
+def test_main_dry_run_all_missing_lists_none(tmp_path, capsys):
+    """dry-run 一张有效表都没有：valid 区块显示 (none)，并点名 missing。"""
+    tf = tmp_path / "tables.txt"
+    tf.write_text("NoSuch\n", encoding="utf-8")
+    code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV), "--dry-run"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "(none)" in out
+    assert "[missing] NoSuch" in out
+
+
+# ==================== render_results 空明细分支 ====================
+
+
+def test_render_results_without_detail_keys(capsys):
+    """结果只有元信息键、没有任何指标时：明细为空也能正常渲染（走 if detail 的空分支）。"""
+    from core.cli import render_results
+
+    print(render_results("TableX", [{"rule": "custom", "passed": True, "column": None}]))
+    out = capsys.readouterr().out
+    assert "Table: TableX" in out
+    assert "[PASS] table :: custom" in out
+
+
+# ==================== 数据库模式（SQLite，CI 也能跑） ====================
+
+
+@pytest.fixture
+def sqlite_db(tmp_path):
+    """造一个含 TableA 的 SQLite 库，返回 SQLAlchemy 连接串。"""
+    db_path = tmp_path / "test.db"
+    df = pd.read_csv(GOOD_CSV)
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    df.to_sql("TableA", engine, if_exists="replace", index=False)
+    engine.dispose()
+    return f"sqlite:///{db_path.as_posix()}"
+
+
+def test_main_db_mode_reads_table(sqlite_db, capsys):
+    """--db 数据库模式：按表名读 TableA，全过退出 0。"""
+    code = main(["--table", "TableA", "--db", sqlite_db])
+    assert code == 0
+    assert "[PASS]" in capsys.readouterr().out
+
+
+def test_main_db_dry_run_shows_database_source(sqlite_db, capsys):
+    """--db + --dry-run：数据源说明显示 database，而不是 CSV。"""
+    code = main(["--table", "TableA", "--db", sqlite_db, "--dry-run"])
+    assert code == 0
+    assert "Data source: database" in capsys.readouterr().out
+
+
+def test_main_db_connection_failure_returns_two(tmp_path, capsys):
+    """数据库读表失败（连接/表不存在）：捕获 SQLAlchemyError，return 2。"""
+    db_dir = tmp_path / "a_directory"
+    db_dir.mkdir()  # 指向一个已存在的目录，SQLite 无法把它当数据库打开，抛 OperationalError
+    url = f"sqlite:///{db_dir.as_posix()}"
+    code = main(["--table", "TableA", "--db", url])
+    assert code == 2
+    assert "failed to read table" in capsys.readouterr().err

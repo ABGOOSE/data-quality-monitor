@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from core.reporter import export_json, export_markdown, export_report
+from core.reporter import (
+    export_json,
+    export_markdown,
+    export_report,
+    export_report_multi,
+)
 
 # 模拟 run_checks 的真实输出结构：rule/passed/column 元信息键 + 各自指标键。
 # 列级结果 column 是列名；表级结果（row_count）column 是 None。
@@ -141,3 +146,60 @@ def test_export_report_unknown_format_raises(tmp_path):
     out = tmp_path / "out.txt"
     with pytest.raises(ValueError, match="yaml"):
         export_report(SAMPLE_RESULTS, "yaml", out, "TableA", generated_at=FIXED_TIME)
+
+
+# ---------- 多表报告 export_report_multi ----------
+# 两张表：TableA 用 SAMPLE_RESULTS（4 条），TableB 给一条全过的 zscore 结果（1 条），共 5 条。
+PER_TABLE = [
+    ("TableA", SAMPLE_RESULTS),
+    (
+        "TableB",
+        [
+            {
+                "rule": "zscore",
+                "passed": True,
+                "outlier_count": 0,
+                "total_count": 15,
+                "outlier_ratio": 0.0,
+                "threshold": 3,
+                "column": "amount",
+            },
+        ],
+    ),
+]
+
+
+def test_multi_markdown_creates_file(tmp_path):
+    """多表 Markdown 应被创建，且两张表各有一个小节。"""
+    out = tmp_path / "multi.md"
+    returned = export_report_multi(PER_TABLE, "markdown", out, generated_at=FIXED_TIME)
+    assert returned == out
+    text = out.read_text(encoding="utf-8")
+    assert "Data Quality Report (Multi-table)" in text
+    assert "## TableA" in text and "## TableB" in text
+
+
+def test_multi_markdown_contains_totals(tmp_path):
+    """多表 Markdown 顶部应有汇总：表数量 2、总检查数 5。"""
+    out = tmp_path / "multi.md"
+    export_report_multi(PER_TABLE, "markdown", out, generated_at=FIXED_TIME)
+    text = out.read_text(encoding="utf-8")
+    assert "表数量：2" in text
+    assert "总检查数：5" in text
+
+
+def test_multi_json_contains_totals(tmp_path):
+    """多表 JSON 应有 totals 汇总，tables 数组含两张表。"""
+    out = tmp_path / "multi.json"
+    export_report_multi(PER_TABLE, "json", out, generated_at=FIXED_TIME)
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["totals"]["tables"] == 2
+    assert data["totals"]["total_checks"] == 5
+    assert len(data["tables"]) == 2
+
+
+def test_multi_unknown_format_raises(tmp_path):
+    """多表报告遇到非法格式也必须大声报错，不能静默。"""
+    out = tmp_path / "multi.txt"
+    with pytest.raises(ValueError, match="Unknown report format"):
+        export_report_multi(PER_TABLE, "excel", out, generated_at=FIXED_TIME)
