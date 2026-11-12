@@ -25,9 +25,7 @@ _ROOT_LOGGER_NAME = "core"
 # 各字段含义：
 #   asctime  发生时间（精确到毫秒）；levelname 级别；
 #   filename 实际文件名（如 cli.py）；funcName 触发日志的函数名；lineno 行号
-_LOG_FORMAT = (
-    "%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s"
-)
+_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s"
 
 
 def setup_logging(

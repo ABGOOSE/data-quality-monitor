@@ -1,6 +1,11 @@
 """Data quality check engine."""
 
+import logging
+
 import pandas as pd
+
+# 模块级 logger；__name__ 是 "core.checker"，会传播到 core 顶层 logger。
+logger = logging.getLogger(__name__)
 
 
 def check_not_null(series: pd.Series) -> dict:
@@ -274,12 +279,21 @@ def run_checks(df: pd.DataFrame, table_rules: dict) -> list[dict]:
             没有实现，必须大声报错，而不是静默跳过。
     """
     results = []
+    # 先统计本次要跑的列级、表级规则条数，作为运行起点日志
+    column_rule_count = sum(len(rules) for rules in table_rules.get("columns", {}).values())
+    table_rule_count = len(table_rules.get("checks", []))
+    logger.info(
+        "running %d column rule(s) and %d table rule(s)",
+        column_rule_count,
+        table_rule_count,
+    )
     # ---- 第一轮：列级规则，每条规则作用在对应的一列上 ----
     for column, rules in table_rules.get("columns", {}).items():
         # 用 .get("columns", {}) 而不是 ["columns"]：
         # 配置里没写 columns 段时返回空字典，循环直接跳过，不会 KeyError
         # 配置声明了但数据里没有这列 → 跳过不报错（有专门的测试守住这个行为）
         if column not in df.columns:
+            logger.debug("column '%s' not in data, skipped", column)
             continue
         series = df[column]
         for rule_config in rules:
@@ -319,4 +333,10 @@ def run_checks(df: pd.DataFrame, table_rules: dict) -> list[dict]:
         # CLI 输出时只用一套写法：column 是 None 就显示 "table"
         result["column"] = None
         results.append(result)
+    passed = sum(1 for result in results if result["passed"])
+    logger.info(
+        "checks finished: %d passed, %d failed",
+        passed,
+        len(results) - passed,
+    )
     return results

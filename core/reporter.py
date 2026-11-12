@@ -9,8 +9,12 @@
 """
 
 import json
+import logging
 from datetime import datetime  # 生成报告时间戳
 from pathlib import Path
+
+# 模块级 logger；__name__ 是 "core.reporter"，会传播到 core 顶层 logger。
+logger = logging.getLogger(__name__)
 
 # 元信息键：描述这条结果本身（什么规则、过没过、哪一列），不是检查指标。
 # 渲染详情时跳过它们，和 cli.py 的 _META_KEYS 是同一套约定。
@@ -138,8 +142,10 @@ def export_report(
         ValueError: If fmt is not supported (fail fast, same as checker).
     """
     if fmt == "json":
+        logger.debug("exporting single-table JSON report to %s", output_path)
         return export_json(results, output_path, table_name, generated_at=generated_at)
     if fmt == "markdown":
+        logger.debug("exporting single-table Markdown report to %s", output_path)
         return export_markdown(results, output_path, table_name, generated_at=generated_at)
     raise ValueError(f"Unknown report format '{fmt}'. Available: json, markdown")
 
@@ -164,6 +170,12 @@ def export_report_multi(
     Raises:
         ValueError: fmt 不支持（fail-fast）。
     """
+    logger.info(
+        "exporting multi-table %s report: %d table(s) to %s",
+        fmt,
+        len(per_table),
+        output_path,
+    )
     if generated_at is None:
         generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
 

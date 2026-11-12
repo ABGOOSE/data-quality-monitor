@@ -10,10 +10,14 @@ Schema 校验（配置校验）：在 yaml 加载成字典之后、规则真正�
 # inspect 是 Python 标准库，用来"查看函数长什么样"（比如它有哪些参数、有没有默认值）。
 # 这里用它把 yaml 里写的参数键和检查函数的真实签名做对齐校验。
 import inspect
+import logging
 
 # 相对导入：从同一个 core 包里的 checker 模块拿两张规则注册表。
 # 列级规则收 Series，表级规则收 DataFrame，所以分成两张表。
 from .checker import RULE_FUNCTIONS, TABLE_RULE_FUNCTIONS
+
+# 模块级 logger；__name__ 是 "core.validator"，会传播到 core 顶层 logger。
+logger = logging.getLogger(__name__)
 
 
 def validate_rules(config: dict) -> list[str]:
@@ -27,20 +31,26 @@ def validate_rules(config: dict) -> list[str]:
         收集所有错误一次返回，方便用户一次修完，而不是改一个报一个。
     """
     errors: list[str] = []
+    logger.debug("validating rules config")
 
     # ---- 第 1 层：顶层结构 ----
     # 整个配置必须是字典（yaml 里最外层是 "tables: ..."）。
     if not isinstance(config, dict):
         # 顶层都不是字典，后面没法继续查，直接返回。
-        return [f"Config must be a mapping (dict), got {type(config).__name__}"]
+        msg = f"Config must be a mapping (dict), got {type(config).__name__}"
+        logger.error(msg)
+        return [msg]
 
     tables = config.get("tables")
     if tables is None:
         # 连 tables 键都没有，后面无从查起，直接返回。
+        logger.error("Missing required top-level key 'tables'")
         return ["Missing required top-level key 'tables'"]
 
     if not isinstance(tables, dict):
-        return [f"'tables' must be a mapping (dict), got {type(tables).__name__}"]
+        msg = f"'tables' must be a mapping (dict), got {type(tables).__name__}"
+        logger.error(msg)
+        return [msg]
 
     if not tables:
         # 有 tables 键但是空的（tables: 后面没内容）。
@@ -94,6 +104,10 @@ def validate_rules(config: dict) -> list[str]:
                     )
                 )
 
+    if errors:
+        logger.error("config validation found %d error(s)", len(errors))
+    else:
+        logger.info("config validation passed: no errors")
     return errors
 
 

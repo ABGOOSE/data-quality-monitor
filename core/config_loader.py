@@ -1,9 +1,13 @@
 """Load quality rules from YAML config files."""
 
 # 把rules.yaml 里的规则加载到 Python 里，变成字典套字典套列表的结构。
+import logging
 from pathlib import Path
 
 import yaml
+
+# 模块级 logger；__name__ 此时是 "core.config_loader"，会传播到 core 顶层 logger。
+logger = logging.getLogger(__name__)
 
 
 def load_rules(path: str | Path) -> dict:
@@ -23,6 +27,11 @@ def load_rules(path: str | Path) -> dict:
     # 从 YAML 文件加载质量规则
     # Args:：描述参数 path 的含义。
     # Returns:：描述返回值，并给出示例结
+    logger.debug("loading rules from %s", path)
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)  # 返回一个 dict
+        config = yaml.safe_load(f)  # safe_load 返回一个 dict
+    # 数一下配置里定义了几张表，确认规则文件正常加载
+    table_count = len(config.get("tables", {})) if isinstance(config, dict) else 0
+    logger.info("rules loaded: %d table(s) defined", table_count)
+    return config
     # 调用 yaml.safe_load 解析文件内容（安全的 YAML 加载，避免执行任意代码），并将解析后的 Python 对象（这里是字典）作为函数返回值返回
