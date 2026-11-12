@@ -36,8 +36,9 @@ def test_main_violations_return_one(capsys):
     assert "[FAIL]" in out
 
 
-def test_main_unknown_table_returns_two(capsys):
+def test_main_unknown_table_returns_two(tmp_path, monkeypatch, capsys):
     """表不存在：返回 2（用法错误），错误信息走 stderr 而不是 stdout。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     code = main(["--table", "no_such_table", "--data", str(GOOD_CSV)])
     assert code == 2
     err = capsys.readouterr().err
@@ -177,8 +178,9 @@ def test_main_multi_tables_data_count_mismatch_returns_two(capsys):
     assert "expects 2 file(s)" in capsys.readouterr().err
 
 
-def test_main_multi_tables_unknown_name_returns_two(capsys):
+def test_main_multi_tables_unknown_name_returns_two(tmp_path, monkeypatch, capsys):
     """多表：其中一张表名拼错 → 退出 2，错误信息点名拼错的表。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     code = main(["--table", "TableA", "NoSuch", "--data", str(GOOD_CSV), str(TABLEB_CSV)])
     assert code == 2
     assert "NoSuch" in capsys.readouterr().err
@@ -250,8 +252,9 @@ def test_main_tables_file_not_found_returns_two(tmp_path, capsys):
     assert "not found" in capsys.readouterr().err
 
 
-def test_main_tables_file_unknown_table_in_list_returns_two(tmp_path, capsys):
+def test_main_tables_file_unknown_table_in_list_returns_two(tmp_path, monkeypatch, capsys):
     """文件里写了不存在的表名：走统一的表名校验，退出 2。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     tf = tmp_path / "tables.txt"
     tf.write_text("TableA\nNoSuch\n", encoding="utf-8")
     code = main(["--tables-file", str(tf), "--data", str(GOOD_CSV), str(TABLEB_CSV)])
@@ -259,8 +262,9 @@ def test_main_tables_file_unknown_table_in_list_returns_two(tmp_path, capsys):
     assert "NoSuch" in capsys.readouterr().err
 
 
-def test_main_missing_tables_report_is_structured_and_deduped(tmp_path, capsys):
+def test_main_missing_tables_report_is_structured_and_deduped(tmp_path, monkeypatch, capsys):
     """无规则表：结构化输出（[missing] 标记、去重、提示可用表）。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     tf = tmp_path / "tables.txt"
     # NoSuch 写两遍，验证去重；再加一个无规则表
     tf.write_text("NoSuch\nNoSuch\nAnotherMissing\n", encoding="utf-8")
@@ -340,8 +344,9 @@ def test_main_dry_run_has_no_file_side_effect(tmp_path):
 # ==================== --skip-missing：宽松模式（跳过无规则表） ====================
 
 
-def test_main_skip_missing_continues_with_valid_table(capsys):
+def test_main_skip_missing_continues_with_valid_table(tmp_path, monkeypatch, capsys):
     """宽松模式：跳过 NoSuch，继续查 TableA；警告走 stderr，结果全 PASS，退出码 0。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     code = main(
         [
             "--table",
@@ -360,9 +365,10 @@ def test_main_skip_missing_continues_with_valid_table(capsys):
     assert "[PASS]" in captured.out
 
 
-def test_main_skip_missing_uses_correct_file_mapping(capsys):
+def test_main_skip_missing_uses_correct_file_mapping(tmp_path, monkeypatch, capsys):
     """宽松模式文件不错位：TableA 用它对应的第一个文件（GOOD_CSV 全过），
     NoSuch 对应的第二个文件被一起排除。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     code = main(
         [
             "--table",
@@ -378,8 +384,9 @@ def test_main_skip_missing_uses_correct_file_mapping(capsys):
     assert "[FAIL]" not in capsys.readouterr().out
 
 
-def test_main_skip_missing_all_skipped_returns_two(capsys):
+def test_main_skip_missing_all_skipped_returns_two(tmp_path, monkeypatch, capsys):
     """宽松模式下所有表都无规则：一张有效表都不剩，退出 2。"""
+    monkeypatch.chdir(tmp_path)  # 缺失报告写进临时目录，不污染项目根
     code = main(
         [
             "--table",
