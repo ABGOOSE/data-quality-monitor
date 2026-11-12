@@ -20,8 +20,14 @@ from pathlib import Path
 # 会按层级向上传播（propagate）到这个顶层 logger，从而统一走下面配置的 handler。
 _ROOT_LOGGER_NAME = "core"
 
-# 统一日志排版：时间 | 级别（左对齐占 8 格）| 模块名:行号 | 消息正文
-_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
+# 统一日志排版，定位信息做到"文件:函数:行号"，一眼锁定出错位置：
+#   时间 | 级别（左对齐占 8 格）| 文件名:函数名:行号 | 消息正文
+# 各字段含义：
+#   asctime  发生时间（精确到毫秒）；levelname 级别；
+#   filename 实际文件名（如 cli.py）；funcName 触发日志的函数名；lineno 行号
+_LOG_FORMAT = (
+    "%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s"
+)
 
 
 def setup_logging(

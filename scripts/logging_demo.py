@@ -24,7 +24,7 @@ def part_one_five_levels() -> None:
     # force=True：演示里要切换门槛，先清掉旧配置再重新配。
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        format="%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
         force=True,
     )
     logger = logging.getLogger("demo")  # 名为 demo 的记录器，记录会向上交给 root 输出
@@ -44,7 +44,7 @@ def part_two_level_filter() -> None:
 
     logging.basicConfig(
         level=logging.INFO,  # 只有数值 >= 20 的才输出
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        format="%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
         force=True,
     )
     logger = logging.getLogger("demo")
@@ -68,9 +68,9 @@ def part_three_handlers() -> Path:
     logger.handlers.clear()  # 清掉旧 Handler，避免重复打印
     logger.propagate = False  # 不向 root 传播：只走自己下面这两个 Handler，控制台不会重复
 
-    # Formatter：统一排版，lineno 是触发日志那一行的行号
+    # Formatter：统一排版，定位到"文件名:函数名:行号"，lineno 是触发日志那一行的行号
     formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
+        "%(asctime)s | %(levelname)-8s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s"
     )
 
     # Handler 1：控制台 StreamHandler
