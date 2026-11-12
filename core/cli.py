@@ -6,6 +6,7 @@
 """
 
 import argparse  # 命令行参数解析器，读懂用户敲了什么命令          进入命令
+import logging  # 标准日志库：发分级日志，替代诊断类 print
 import sys  # 是「访问 Python 解释器本身」的接口，你和解释器的对讲机      退出码、错误通道
 from datetime import datetime  # 生成报告文件名的时间戳
 from pathlib import Path  # 路径处理
@@ -18,6 +19,9 @@ from core.config_loader import (
 )
 from core.data_loader import (
     load_dataframe,  # 从 core/data_loader.py 导入统一数据加载，CSV 或数据库都读成 DataFrame
+)
+from core.logging_utils import (
+    setup_logging,  # 统一日志配置：入口调一次，全项目按统一规则输出
 )
 from core.reporter import (
     export_report,  # 单表报告导出（--report 用）
@@ -37,6 +41,10 @@ DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "rules.yaml"  
 # 结果字典里的"元信息"键：它们描述这条结果本身（什么规则、过没过、哪一列），
 # 不是检查出来的指标（如 null_count）。格式化输出时跳过，只展示真正的指标。
 _META_KEYS = {"rule", "passed", "column"}
+
+# 本模块统一用这个 logger 发诊断日志；__name__ 此时是 "core.cli"，
+# 会向上传播（propagate）到 setup_logging 配置的 "core" 顶层 logger，再统一输出。
+logger = logging.getLogger(__name__)
 
 
 # ============ 业务区 1：声明命令收哪些参数 ============
@@ -137,6 +145,21 @@ def build_parser() -> argparse.ArgumentParser:  # 为 dqm 命令构建 argparse 
         "--skip-missing",
         action="store_true",
         help="Lenient mode: skip tables without rules (warn instead of failing)",
+    )
+    # --log-level：日志门槛，choices 限定 5 个级别，默认 INFO。
+    # 级别以下的日志被过滤，例如设 WARNING 时 INFO/DEBUG 都不显示。
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Logging threshold; messages below this level are filtered out (default: INFO)",
+    )
+    # --log-file：给了路径就把日志同时写进文件；不传只输出到控制台，默认不产生文件。
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        help="Also write logs to this file (default: console only)",
     )
     return parser
 
@@ -326,13 +349,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)     # 第 2 步：调对象的方法，拿回 args
     args = ...                         # 第 3 步：存起来
     """
+    # 入口处统一配置日志：门槛和文件来自命令行参数，之后全模块的 logger 都按此规则输出。
+    setup_logging(level=args.log_level, log_file=args.log_file)
     rules = load_rules(args.config)
 
     # 配置 schema 校验：加载后立刻体检，把"配置乱写"的问题挡在最前面。
     config_errors = validate_rules(rules)
     if config_errors:
         for error in config_errors:
-            print(f"Config error: {error}", file=sys.stderr)
+            logger.error("Config error: %s", error)
         return 2
 
     available_tables = rules.get("tables", {})
@@ -343,13 +368,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             requested_tables = _read_list_file(args.tables_file)
         except FileNotFoundError:
-            print(f"Error: tables file not found: {args.tables_file}", file=sys.stderr)
+            logger.error("tables file not found: %s", args.tables_file)
             return 2
     else:
         requested_tables = list(args.table)  # nargs="+" 已经是 list
 
     if not requested_tables:
-        print("Error: no table to check (config defines no tables)", file=sys.stderr)
+        logger.error("no table to check (config defines no tables)")
         return 2
 
     # 分成有规则（valid）和无规则（missing）两组；missing 去重保序。
@@ -366,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             csv_files = _read_list_file(args.data_file)
         except FileNotFoundError:
-            print(f"Error: data file list not found: {args.data_file}", file=sys.stderr)
+            logger.error("data file list not found: %s", args.data_file)
             return 2
     else:
         csv_files = list(args.data)  # nargs="+" 已经是 list
@@ -390,16 +415,13 @@ def main(argv: list[str] | None = None) -> int:
                 args.config,
                 "lenient mode — tables without rules are skipped",
             )
-            print(
-                f"Warning: skipping {len(missing_tables)} table(s) without rules:",
-                file=sys.stderr,
-            )
+            logger.warning("skipping %d table(s) without rules:", len(missing_tables))
             for t in missing_tables:
-                print(f"  [skip] {t}", file=sys.stderr)
-            print(f"Missing tables report written to {missing_path}", file=sys.stderr)
+                logger.warning("[skip] %s", t)
+            logger.info("missing tables report written to %s", missing_path)
             if not valid_tables:
                 # 跳完一张有效表都不剩，没法继续
-                print("Error: no valid table left to check after skipping", file=sys.stderr)
+                logger.error("no valid table left to check after skipping")
                 return 2
             target_tables = valid_tables
         else:
@@ -410,17 +432,11 @@ def main(argv: list[str] | None = None) -> int:
                 args.config,
                 "strict mode — tables without rules are rejected",
             )
-            print(
-                f"Error: {len(missing_tables)} table(s) have no rules in {args.config}:",
-                file=sys.stderr,
-            )
+            logger.error("%d table(s) have no rules in %s:", len(missing_tables), args.config)
             for t in missing_tables:
-                print(f"  [missing] {t}", file=sys.stderr)
-            print(
-                f"Tables defined in rules.yaml: {', '.join(available_tables)}",
-                file=sys.stderr,
-            )
-            print(f"Missing tables report written to {missing_path}", file=sys.stderr)
+                logger.error("[missing] %s", t)
+            logger.error("Tables defined in rules.yaml: %s", ", ".join(available_tables))
+            logger.info("missing tables report written to %s", missing_path)
             return 2
     else:
         target_tables = valid_tables  # 全部有效
@@ -430,10 +446,11 @@ def main(argv: list[str] | None = None) -> int:
         # 文件数按"原始请求表数"校验；再用"表→文件"映射，只取实际要查的表的文件
         # （这样跳过某表时，它对应的文件也一起排除，不会错位）
         if len(csv_files) != len(requested_tables):
-            print(
-                f"Error: CSV data expects {len(requested_tables)} file(s) for "
-                f"{len(requested_tables)} table(s), but got {len(csv_files)}",
-                file=sys.stderr,
+            logger.error(
+                "CSV data expects %d file(s) for %d table(s), but got %d",
+                len(requested_tables),
+                len(requested_tables),
+                len(csv_files),
             )
             return 2
         file_map = dict(zip(requested_tables, csv_files))
@@ -447,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     for table, csv_path in zip(target_tables, csv_paths):
         results, error = _run_one_table(table, csv_path, args, rules)
         if error:
-            print(f"Error: {error}", file=sys.stderr)
+            logger.error("%s", error)
             return 2  # 读数据失败：fail-fast，立即停止
         print(render_results(table, results))
         per_table.append((table, results))
