@@ -2,7 +2,7 @@
 
 轻量级数据质量监控工具：规则写在 YAML 里，代码读配置、对接 **CSV 或数据库**执行检查，输出 PASS/FAIL 结果与报告，并用进程退出码对接 CI / 调度系统。
 
-一个用于练习「配置驱动 + 规则引擎 + 多数据源 + 日志体系 + 契约测试 + CI/CD」的数据工程实践项目。
+一个用于练习「配置驱动 + 规则引擎 + 多数据源 + 日志体系 + 契约测试 + 覆盖率量化 + CI/CD」的数据工程实践项目。
 
 A lightweight data quality monitoring tool. Rules are declared in YAML, checked against CSV or database data, and results are reported with process exit codes.
 
@@ -30,6 +30,7 @@ A lightweight data quality monitoring tool. Rules are declared in YAML, checked 
 - **结果导出**：`--report json|markdown` 把检查结果写成报告文件（JSON 给程序、Markdown 给人）
 - **全链路日志**：标准库 logging，统一格式含时间/级别/文件/函数/行号，支持 `--log-level` 调级别、`--log-file` 落盘
 - **契约测试**：YAML 里声明的每条规则必须有对应实现且参数匹配，CI 自动拦截「配置写了、代码没写」
+- **测试覆盖率量化**：基于 pytest-cov / coverage.py，同时统计**语句覆盖 + 分支覆盖**，列出未覆盖行；设 90% 质量门槛（不达标命令非 0 退出、CI 变红），并可生成 HTML 覆盖率报告逐行查看
 - **Fail fast**：未知规则名直接抛 `ValueError`，不静默跳过
 - **CI**：GitHub Actions 在 push / PR 时自动跑 ruff + pytest（多版本矩阵）+ 覆盖率门槛 + CLI 冒烟测试
 
@@ -109,16 +110,27 @@ data-quality-monitor/
 ## 测试与质量
 
 ```bash
-pytest                                # 全量单元测试 + 契约测试
-pytest --cov                          # 跑测试并统计覆盖率
-pytest -v                             # 详细看每个用例
-pytest --html=report.html --self-contained-html   # 生成浏览器可看的 HTML 报告
-pytest --junitxml=test-results.xml    # 生成 JUnit XML（供 CI 平台解析）
-ruff check .                          # 代码规范检查
-ruff format .                         # 代码格式化
+pytest                                          # 全量单元测试 + 契约测试
+pytest --cov                                    # 跑测试并统计覆盖率
+pytest --cov --cov-report=term-missing          # 覆盖率表 + 列出未覆盖的具体行号
+pytest --cov --cov-report=html                  # 生成 HTML 覆盖率报告（htmlcov/，逐行高亮）
+pytest -v                                       # 详细看每个用例
+pytest --html=report.html --self-contained-html # 生成浏览器可看的 HTML 测试报告
+pytest --junitxml=test-results.xml              # 生成 JUnit XML（供 CI 平台解析）
+ruff check .                                    # 代码规范检查
+ruff format .                                   # 代码格式化
 ```
 
-当前状态：**132 个测试全部通过，core 包覆盖率 100%**（语句 447、分支 144，零遗漏）。
+**覆盖率量化口径**：
+
+| 指标 | 含义 | 当前值 |
+|------|------|--------|
+| 语句覆盖（Stmts） | 可执行语句被测试跑到的比例 | 447 条，全部覆盖 |
+| 分支覆盖（Branch） | if/else 等分支两条路是否都走到 | 144 条，全部覆盖 |
+| 未覆盖（Miss） | 没跑到的语句/分支 | 0 |
+| 质量门槛（fail_under） | 低于该比例命令非 0 退出、CI 变红 | 90% |
+
+当前状态：**132 个测试全部通过，core 包覆盖率 100%**（语句 447、分支 144，零遗漏），高于 90% 门槛。
 
 > 测试报告（`report.html`、`test-results.xml`）和 `.idea/`、`.venv/` 等均已在 `.gitignore` 忽略，不提交到仓库。
 
@@ -149,6 +161,7 @@ ruff format .                         # 代码格式化
 - [x] 结果导出（JSON / Markdown 报告）
 - [x] 数据库数据源（SQLAlchemy，含达梦）
 - [x] 全链路日志体系
+- [x] 测试覆盖率量化（语句+分支，90% 门槛，HTML 报告）
 - [ ] 更多规则：`regex`
 - [ ] 告警（Webhook 通知）
 - [ ] 接入 Airflow 定时调度
